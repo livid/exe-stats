@@ -114,6 +114,11 @@ try {
 .sdesk .live .row .pg a { color: #262626; text-decoration: none; }
 .sdesk .live .row .pg a:hover { text-decoration: underline; }
 .sdesk .live .row .ago { flex: none; font-size: 11px; color: #555; white-space: nowrap; }
+/* a link on a status line: bold and unadorned, as the desktop draws one.
+   Said here so a host's own stylesheet does not decide it and the desk
+   reads the same wherever it is drawn. */
+.sdesk .statusbar a { font-weight: bold; text-decoration: none; }
+.sdesk .statusbar a:hover { text-decoration: underline; }
 /* a phone: narrower name and label columns, and every other axis label
    dropped so the words never overlap */
 @media (max-width: 480px) { .sdesk .live .row .who { width: 104px; } .sdesk .tile { flex-basis: 84px; min-width: 84px; } .sdesk .chart { grid-template-columns: 34px 1fr; }
