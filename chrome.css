@@ -53,4 +53,3 @@ a { color: var(--hl); }
   box-shadow: inset 1px 1px 0 var(--g300), inset -1px -1px 0 #777, inset 2px 2px 0 #fff, inset -2px -2px 0 #aaa; }
 .btn:active { background: var(--g800); color: #fff;
   box-shadow: inset 1px 1px 0 #444, inset -1px -1px 0 #888, inset 2px 2px 0 #555, inset -2px -2px 0 #777; }
-.main { max-width: 640px; margin: 0 auto; }
