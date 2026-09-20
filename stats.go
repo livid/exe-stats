@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -46,8 +47,9 @@ type Collector struct {
 
 	sessions map[string]*session // by visitor; the writer goroutine's own
 
-	stop chan struct{} // closed to end Run
-	done chan struct{} // closed when Run has written what was left
+	stop    chan struct{} // closed to end Run
+	done    chan struct{} // closed when Run has written what was left
+	running atomic.Bool   // whether Run is the one to close done
 
 	Log func(format string, args ...any)
 }
@@ -92,6 +94,7 @@ func (c *Collector) Location() *time.Location { return c.loc }
 // the store in batches, once a second or every 64 hits. It returns when
 // Stop is called, having written what was queued.
 func (c *Collector) Run() {
+	c.running.Store(true)
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
 	defer close(c.done)
@@ -142,6 +145,9 @@ func (c *Collector) Stop() {
 	default:
 	}
 	close(c.stop)
+	if !c.running.Load() {
+		return // nothing is writing: there is nothing to wait for
+	}
 	select {
 	case <-c.done:
 	case <-time.After(5 * time.Second):
