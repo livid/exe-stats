@@ -262,3 +262,31 @@ func TestStopDrains(t *testing.T) {
 		t.Errorf("page views after Stop = %d, want the one that was queued", sum.Pageviews)
 	}
 }
+
+// The desk is one thing: the window that heads it carries the only close
+// box, and pressing it leads to whatever the host calls home. The
+// windows under it cannot be closed, so they show no box at all.
+func TestOneCloseBox(t *testing.T) {
+	s := testStats(t)
+	s.opt.HomeURL, s.opt.HomeLabel = "/", "Back to the homepage"
+	now := time.Now().UnixMilli()
+	if err := s.db.Add([]Hit{{TS: now - 1000, VID: "a", SID: "s1", Entry: true, Path: "/", Kind: "home",
+		Country: "JP", Device: "desktop", Browser: "Chrome", OS: "macOS"}}); err != nil {
+		t.Fatal(err)
+	}
+	_, body := get(t, s.Handler(), "/stats?range=24h")
+	if n := strings.Count(body, `class="tbox`); n != 1 {
+		t.Errorf("the desk draws %d close boxes, want the one", n)
+	}
+	if !strings.Contains(body, `<a class="tbox" href="/" title="Back to the homepage"`) {
+		t.Error("the desk's close box does not lead home, or is not the link itself")
+	}
+	// it is on the window that heads the desk, before any other window
+	first := strings.Index(body, `class="tbox`)
+	if second := strings.Index(body, `class="window live`); second >= 0 && first > second {
+		t.Error("the close box is not on the window that heads the desk")
+	}
+	if n := strings.Count(body, `class="titlebar"`); n < 5 {
+		t.Fatalf("only %d windows rendered; the count above proves little", n)
+	}
+}

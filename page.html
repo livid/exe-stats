@@ -122,7 +122,7 @@ try {
 {{end}}
 {{define "stats"}}{{with .}}<div class="sdesk">
 <div class="window main sw">
-  <div class="titlebar"><span class="tbox"><a href="{{$.HomeURL}}" title="{{$.HomeLabel}}"></a></span><span class="stripe"></span><span class="title">{{$.Title}}{{with $.Host}} · {{.}}{{end}}</span><span class="stripe"></span></div>
+  <div class="titlebar"><a class="tbox" href="{{$.HomeURL}}" title="{{$.HomeLabel}}" aria-label="{{$.HomeLabel}}"></a><span class="stripe"></span><span class="title">{{$.Title}}{{with $.Host}} · {{.}}{{end}}</span><span class="stripe"></span></div>
   <div class="frame">
     <div class="strip ranges">{{range .Ranges}}<a class="btn tab{{if .On}} on{{end}}" href="{{.URL}}"{{if .On}} aria-current="page"{{end}}>{{.Label}}</a>{{end}}<span class="online">{{.Online}} online</span></div>
     {{if .Filters}}<div class="strip chips">Only:{{range .Filters}} <span class="chip">{{.Label}} <b>{{.Value}}</b><a href="{{.URL}}" title="Lift this filter">×</a></span>{{end}}</div>{{end}}
@@ -143,7 +143,7 @@ try {
   </div>
 </div>
 <div class="window live sw">
-  <div class="titlebar"><span class="tbox"></span><span class="stripe"></span><span class="title">Live</span><span class="stripe"></span></div>
+  <div class="titlebar"><span class="stripe"></span><span class="title">Live</span><span class="stripe"></span></div>
   <div class="frame">
     <div class="rows">{{range .Recent}}<div class="row"><span class="who">{{template "statsdisc" .Colour}}<span>{{.Alias}}</span></span><span class="cc">{{.Country}}</span><span class="pg"><a href="{{.Path}}" title="{{.Path}}">{{.Label}}</a></span><span class="ago">{{.Ago}}</span></div>{{else}}<div class="none">No one yet.</div>{{end}}</div>
     <div class="statusbar"><span>{{.Online}} online: a page in the last 5 minutes</span><span>latest {{len .Recent}}</span></div>
@@ -151,7 +151,7 @@ try {
 </div>
 <div class="sgrid">{{range .Lanes}}<div class="lane">{{range .}}{{$l := .}}
 <div class="window sw" id="{{.Anchor}}">
-  <div class="titlebar"><span class="tbox"></span><span class="stripe"></span><span class="title">{{.Title}}</span><span class="stripe"></span></div>
+  <div class="titlebar"><span class="stripe"></span><span class="title">{{.Title}}</span><span class="stripe"></span></div>
   <div class="frame">
     <div class="strip">{{range .Views}}<a class="btn tab{{if .On}} on{{end}}" href="{{.URL}}#{{$l.Anchor}}"{{if .On}} aria-current="page"{{end}}>{{.Label}}</a>{{end}}</div>
     <div class="rows">{{range .Rows}}<div class="row"><span class="lab"><span class="bar" style="width: {{.Pct}}%"></span><a href="{{.URL}}#{{$l.Anchor}}"{{if .Title}} title="{{.Title}}"{{end}}>{{.Label}}{{if .Tag}}<span class="tag">{{.Tag}}</span>{{end}}</a></span><span class="n">{{.N}}</span></div>{{else}}<div class="none">{{.Empty}}</div>{{end}}</div>
