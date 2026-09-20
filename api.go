@@ -43,6 +43,17 @@ import (
 //go:embed document.html
 var documentHTML string
 
+//go:embed chrome.css
+var chromeCSS string
+
+// ChromeCSS is the Mac OS 9 Platinum chrome the desk is drawn in: the
+// window with its striped bar, hard shadow and close box, the sunken
+// frame, the status strip and the push button. The standalone page uses
+// it, and a host whose own pages should match can serve it as its
+// stylesheet — which is how the exe site keeps one chrome across its
+// homepage, its documentation and this desk.
+func ChromeCSS() string { return chromeCSS }
+
 // Options configures a Stats. Every field may be left empty.
 type Options struct {
 	// Location is where the days begin: the salt rotates at midnight
@@ -209,8 +220,9 @@ func (s *Stats) Handler() http.Handler {
 // parses TemplateHTML into its own set registers these on it first.
 func Funcs() template.FuncMap {
 	return template.FuncMap{
-		"mul": func(a, b int) int { return a * b },
-		"pct": func(v float64) string { return strconv.FormatFloat(v, 'f', 2, 64) },
+		"chrome": func() template.CSS { return template.CSS(chromeCSS) },
+		"mul":    func(a, b int) int { return a * b },
+		"pct":    func(v float64) string { return strconv.FormatFloat(v, 'f', 2, 64) },
 	}
 }
 

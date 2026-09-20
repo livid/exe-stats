@@ -1,0 +1,56 @@
+/* The Platinum chrome a host without one of its own gets with the desk:
+   the window, its striped bar and its close box, copied from the exe
+   desktop (internal/server/ui/index.html), which is where this look is
+   defined. A host that has these already renders the "stats" block
+   inside its own document and never sees this. */
+:root {
+  --black: #262626;
+  --g200: #eee; --g300: #ddd; --g400: #ccc; --g500: #bbb; --g600: #999; --g700: #808080; --g800: #666;
+  --hl: #333399; --lav: #ccf;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body { margin: 0; padding: 24px 12px 48px; background: var(--g400); color: var(--black); cursor: default;
+  padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right));
+  font: 12px/1.45 "Charcoal", "Chicago", "Geneva", "Lucida Grande", "Lucida Sans", Verdana, sans-serif; }
+a { color: var(--hl); }
+.window { position: relative; max-width: 640px; margin: 0 auto 22px;
+  background: var(--g400); border: 1px solid var(--black);
+  box-shadow: 2px 2px 0 var(--black); }
+.window::before { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 4;
+  box-shadow: inset 1px 1px 0 rgba(255,255,255,.5), inset -1px -1px 0 var(--g600), inset 1px 1px 0 #fff; }
+.titlebar { display: flex; align-items: center; gap: 4px; padding: 2px 4px;
+  background: var(--g400); user-select: none; }
+.titlebar .stripe { flex: 1; height: 12px; min-width: 8px; position: relative;
+  background-color: var(--g300);
+  background-image: linear-gradient(#fff, #fff 50%, #777 50%, #777);
+  background-size: 100% 2px; background-repeat: repeat; }
+.titlebar .stripe::before { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 1px;
+  background-image: linear-gradient(#fff, #fff 50%, #ccc 50%, #ccc);
+  background-size: 100% 2px; background-repeat: repeat; border-bottom: 1px solid #ccc; }
+.titlebar .stripe::after { content: ""; position: absolute; top: 0; bottom: 0; right: 0; width: 1px;
+  background-image: linear-gradient(#ccc, #ccc 50%, #777 50%, #777);
+  background-size: 100% 2px; background-repeat: repeat; }
+.titlebar .title { font-weight: bold; font-size: 12px; line-height: 13px; padding: 0 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%;
+  background: var(--g400); }
+.tbox { display: block; width: 13px; height: 13px; flex: none; position: relative;
+  border: none; padding: 0; cursor: default;
+  background: linear-gradient(135deg, #9a9a9a 0%, #f1f1f1 100%) 50% / 9px 9px;
+  box-shadow: inset 1px 1px 0 var(--g700), inset -1px -1px 0 #fff,
+    inset 0 0 0 2px var(--black), inset 3px 3px 0 #fff, inset -3px -3px 0 var(--g700); }
+.tbox:active::after { content: ""; position: absolute; inset: 2px; z-index: 1;
+  background-image: linear-gradient(135deg, #353535cc 0%, #9c9c9ccc 100%); }
+.frame { margin: 0 4px 4px; border: 1px solid var(--black); background: #fff;
+  box-shadow: -1px -1px 0 var(--g600), 1px 1px 0 #fff; }
+.statusbar { border-top: 1px solid var(--black); background: var(--g300);
+  box-shadow: inset 1px 1px 0 rgba(255,255,255,.6), inset -1px -1px 0 #aaa;
+  padding: 3px 8px; font-size: 11px; color: #333; display: flex; align-items: center; gap: 12px; }
+.btn { display: inline-block; box-sizing: border-box; min-width: 58px; height: 20px; padding: 2px 13px;
+  background: var(--g300); color: var(--black); text-decoration: none; text-align: center;
+  font-size: 12px; line-height: 14px; font-weight: bold; white-space: nowrap;
+  border: 1px solid var(--black); border-radius: 3px;
+  box-shadow: inset 1px 1px 0 var(--g300), inset -1px -1px 0 #777, inset 2px 2px 0 #fff, inset -2px -2px 0 #aaa; }
+.btn:active { background: var(--g800); color: #fff;
+  box-shadow: inset 1px 1px 0 #444, inset -1px -1px 0 #888, inset 2px 2px 0 #555, inset -2px -2px 0 #777; }
+.main { max-width: 640px; margin: 0 auto; }
