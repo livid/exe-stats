@@ -46,6 +46,9 @@ var documentHTML string
 //go:embed chrome.css
 var chromeCSS string
 
+//go:embed popup.css
+var popupCSS string
+
 // ChromeCSS is the Mac OS 9 Platinum chrome the desk is drawn in: the
 // window with its striped bar, hard shadow and close box, the sunken
 // frame, the status strip and the push button. The standalone page uses
@@ -53,6 +56,11 @@ var chromeCSS string
 // stylesheet — which is how the exe site keeps one chrome across its
 // homepage, its documentation and this desk.
 func ChromeCSS() string { return chromeCSS }
+
+// PopupCSS is the Platinum pop-up menu button, one block for every page
+// that wears the chrome (popup.css): a host links or embeds it, never
+// copies it. The template func "popup" is the same for a template.
+func PopupCSS() string { return popupCSS }
 
 // Options configures a Stats. Every field may be left empty.
 type Options struct {
@@ -221,6 +229,7 @@ func (s *Stats) Handler() http.Handler {
 func Funcs() template.FuncMap {
 	return template.FuncMap{
 		"chrome": func() template.CSS { return template.CSS(chromeCSS) },
+		"popup":  func() template.CSS { return template.CSS(popupCSS) },
 		"mul":    func(a, b int) int { return a * b },
 		"pct":    func(v float64) string { return strconv.FormatFloat(v, 'f', 2, 64) },
 	}
