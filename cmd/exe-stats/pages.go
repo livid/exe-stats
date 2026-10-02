@@ -113,7 +113,7 @@ func commas(n int64) string {
 	return s
 }
 
-// short is a count the way the tiers say it: 10K, 500K.
+// short is a count the way the tiers say it: 20K, 50M.
 func short(n int64) string {
 	switch {
 	case n >= 1000000 && n%1000000 == 0:

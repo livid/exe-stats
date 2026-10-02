@@ -80,31 +80,32 @@ func TestCountMonths(t *testing.T) {
 		}
 		return cur
 	}
-	sept := run(0, Usage{}, 25000)
-	if sept.Views != 20000 || !sept.Full || ru.views(0, sept, Usage{}) != StateOver {
+	c0, c1 := ru.Tiers[0].Views, ru.Tiers[1].Views // the base and middle caps
+	sept := run(0, Usage{}, c0*5/2)
+	if sept.Views != 2*c0 || !sept.Full || ru.views(0, sept, Usage{}) != StateOver {
 		t.Fatalf("a first month over: %+v %s", sept, ru.views(0, sept, Usage{}))
 	}
-	if u := run(0, Usage{}, 10000); u.Full || ru.views(0, u, Usage{}) != StateGood {
+	if u := run(0, Usage{}, c0); u.Full || ru.views(0, u, Usage{}) != StateGood {
 		t.Fatalf("a month at the cap is not over: %+v", u)
 	}
-	oct := run(0, sept, 15000)
-	if oct.Views != 10000 || !oct.Full || ru.views(0, oct, sept) != StateCapped {
+	oct := run(0, sept, c0*3/2)
+	if oct.Views != c0 || !oct.Full || ru.views(0, oct, sept) != StateCapped {
 		t.Fatalf("the second month: %+v %s", oct, ru.views(0, oct, sept))
 	}
 	// still full: November is capped too
-	if nov := run(0, oct, 15000); nov.Views != 10000 {
+	if nov := run(0, oct, c0*3/2); nov.Views != c0 {
 		t.Fatalf("the third month: %+v", nov)
 	}
 	// a month under the cap, and the one after is forgiven again
-	quiet := run(0, sept, 9000)
+	quiet := run(0, sept, c0*9/10)
 	if quiet.Full {
 		t.Fatalf("a month under the cap: %+v", quiet)
 	}
-	if dec := run(0, quiet, 15000); dec.Views != 15000 {
+	if dec := run(0, quiet, c0*3/2); dec.Views != c0*3/2 {
 		t.Fatalf("after a quiet month: %+v", dec)
 	}
 	// a higher tier starts clean
-	if up := run(1, sept, 150000); up.Views != 150000 || ru.views(1, up, sept) != StateOver {
+	if up := run(1, sept, c1*3/2); up.Views != c1*3/2 || ru.views(1, up, sept) != StateOver {
 		t.Fatalf("the middle tier after a full base month: %+v", up)
 	}
 	// no tier counts nothing
@@ -115,7 +116,7 @@ func TestCountMonths(t *testing.T) {
 
 func TestTierOf(t *testing.T) {
 	ru := testRules()
-	for raw, want := range map[int64]int{0: -1, 9999*tok + 999999: -1, 10000 * tok: 0, 49999 * tok: 0, 50000 * tok: 1, 100000 * tok: 2, 999999 * tok: 2, 1000000 * tok: 3, 5000000 * tok: 3} {
+	for raw, want := range map[int64]int{0: -1, 9999*tok + 999999: -1, 10000 * tok: 0, 49999 * tok: 0, 50000 * tok: 1, 100000 * tok: 2, 999999 * tok: 2, 1000000 * tok: 3, 1999999 * tok: 3, 2000000 * tok: 4, 5000000 * tok: 4} {
 		if got := ru.tierOf(raw); got != want {
 			t.Errorf("tierOf(%d) = %d, want %d", raw, got, want)
 		}

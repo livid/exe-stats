@@ -657,16 +657,16 @@ func TestMonthFullOnTheServer(t *testing.T) {
 	h.form(w, "/v1/sites", url.Values{"domain": {"a.example"}})
 	a := h.siteID(w, "a.example")
 	h.app.mu.Lock()
-	h.app.accts[w.addr].cur.Views = 19999
+	h.app.accts[w.addr].cur.Views = 39999
 	h.app.mu.Unlock()
 	h.app.limit = newLimiter()
 	if got := h.beacon(a, "https://a.example/", "", "https://a.example"); got != beaconCounted {
-		t.Fatalf("view 20,000: %q", got)
+		t.Fatalf("view 40,000: %q", got)
 	}
 	if got := h.beacon(a, "https://a.example/", "", "https://a.example"); got != beaconFull {
-		t.Fatalf("view 20,001: %q", got)
+		t.Fatalf("view 40,001: %q", got)
 	}
-	if page := h.do(w, "GET", "/", "", nil).Body.String(); !strings.Contains(page, "Over the month&#39;s 10K views. Counting goes on up to 20K this month; the Middle tier would fit.") {
+	if page := h.do(w, "GET", "/", "", nil).Body.String(); !strings.Contains(page, "Over the month&#39;s 20K views. Counting goes on up to 40K this month; the Middle tier would fit.") {
 		t.Fatal("the page does not say the month is over the cap")
 	}
 }
@@ -718,7 +718,7 @@ func TestTierAddedApplies(t *testing.T) {
 		want       int
 		checkedOne bool
 	}{
-		{"rich", 2, 2000000 * tok, 3, true},      // holds a million: the new Top
+		{"rich", 2, 2000000 * tok, 4, true},      // holds two million: the new Max
 		{"short", 2, 20000 * tok, 2, true},       // under High: a check, and its grace, decide
 		{"unread", -1, 2000000 * tok, -1, false}, // never checked: nothing to go by
 	} {
