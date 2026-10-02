@@ -83,7 +83,7 @@ const ok = (cond, what, detail) => { n++; if (!cond) fails++; console.log((cond 
 
 async function context(browser, names, opts = {}) {
   const ctx = await browser.newContext({ viewport: opts.viewport || { width: 640, height: 900 }, deviceScaleFactor: opts.dpr || 1, userAgent: UA,
-    isMobile: !!opts.phone, hasTouch: !!opts.phone });
+    isMobile: !!opts.phone, hasTouch: !!opts.phone, reducedMotion: opts.still ? 'reduce' : 'no-preference' });
   await ctx.exposeBinding('__sign', (_, name, msgB64) => crypto.sign(null, Buffer.from(msgB64, 'base64'), keys[name].privateKey).toString('base64'));
   if (names.length) await ctx.addInitScript(mock, { names, keys: Object.fromEntries(names.map(k => [k, { b64: keys[k].b64, addr: keys[k].addr }])) });
   const page = await ctx.newPage();
@@ -119,6 +119,16 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
       const b = await box(page, '#signin'), tag = v.phone ? 'phone' : 'dpr' + v.dpr;
       ok(Math.round(b.height) === 20, `${tag}: Sign in with Solana is 20px high`, b);
       ok(await noScroll(page), `${tag}: the welcome page does not scroll sideways`);
+      // the hero: a bitmap a device pixel a pixel, with the day drawn on it
+      const hero = await page.evaluate(() => {
+        const c = document.getElementById('hero'), r = c.getBoundingClientRect();
+        const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+        let inked = 0;
+        for (let i = 0; i < d.length; i += 4) if (d[i] !== 255 || d[i + 1] !== 255 || d[i + 2] !== 255) inked++;
+        return { w: c.width, h: c.height, cw: r.width, ch: r.height, inked };
+      });
+      ok(hero.w === Math.round(hero.cw * (v.dpr || 1)) && hero.h === Math.round(hero.ch * (v.dpr || 1)) && hero.ch === 96 && hero.inked > 0,
+        `${tag}: the hero is drawn at the screen's own pixels`, hero);
       await shot(page, 'welcome-' + tag);
       if (v.dpr === 1) {
         await page.click('#signin');
@@ -127,6 +137,17 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
         ok(b2.y === b.y && b2.x === b.x, 'no wallet: the line says so and the button has not moved', [b, b2]);
       }
       ok(page.errors.length === 0, `${tag}: no script errors`, page.errors);
+      await ctx.close();
+    }
+
+    // ---- the hero holds still for a reader who asks for less motion ----
+    {
+      const { ctx, page } = await context(browser, [], { still: true });
+      await page.goto(APP + '/');
+      const frame = () => page.evaluate(() => document.getElementById('hero').toDataURL());
+      const a = await frame();
+      await page.waitForTimeout(3000);
+      ok(a === await frame(), 'reduced motion: the hero is one still frame');
       await ctx.close();
     }
 

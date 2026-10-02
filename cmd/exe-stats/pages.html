@@ -9,7 +9,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Stats · {{.Host}}</title>
-<meta name="description" content="Page views for your own sites: one script tag, no cookies, and a desk of numbers for each site. For {{.Token}} holders.">
+<meta name="description" content="See who reads your website: simple, private visitor stats from one line of code. No cookies, no IP addresses stored. For {{.Token}} holders.">
 <meta name="theme-color" content="#dddddd">
 {{template "icons"}}
 <style>{{chrome}}{{template "style"}}</style>
@@ -64,13 +64,18 @@
 <div class="window" id="welcome">
   <div class="titlebar"><span class="stripe"></span><span class="title">Stats</span><span class="stripe"></span></div>
   <div class="frame">
+    <div class="hero"><canvas id="hero" role="img" aria-label="A website's day: readers arrive one by one, and each hour's bar grows as they are counted"></canvas></div>
     <div class="body">
-      <h1>Page views for your own sites<small>One script tag, no cookies, and a desk of numbers for each site.</small></h1>
-      <p>Visitors, page views, sources, countries and devices, counted as the hub and exe count their own readers. A visitor is a hash that changes every midnight: no address is stored, and nothing is kept in anyone's browser.</p>
-      <p>It is for {{.Token}} holders. How much a wallet holds decides how many sites it may add and how many views a month are counted. Holding is read from the chain: the wallet signs one message to sign in, and never a transaction.</p>
+      <h1>See who reads your website<small>Simple, private visitor stats from one line of code.</small></h1>
+      <p>Stats counts the people who open your pages and shows you, hour by hour, how many came, what they read, which links and searches sent them, and which countries and devices they came from.</p>
+      <dl class="points">
+        <dt>Setup</dt><dd>Add your site, then paste the one line of code it gives you into your pages. Numbers show up as soon as people visit.</dd>
+        <dt>Privacy</dt><dd>No cookies, nothing saved in visitors' browsers, and no IP addresses stored. Visitors are told apart by an anonymous code that changes every midnight. The code is <a href="https://github.com/livid/exe-stats">open source</a>.</dd>
+        <dt>Access</dt><dd>For holders of {{.Token}}, a token on Solana. Sign in with your wallet: the more it holds, the more sites you can add and the more views a month are counted. Nothing is charged, and signing in never sends a transaction.</dd>
+      </dl>
       <div class="buttons"><span class="say" id="say" role="status"></span><button class="btn default" id="signin" type="button">Sign in with Solana</button></div>
     </div>
-    <div class="statusbar"><span>Nothing here costs anything: tokens are held, not spent</span></div>
+    <div class="statusbar"><span>Tokens are held, never spent</span></div>
   </div>
 </div>
 {{template "tiers" .}}
@@ -192,6 +197,180 @@
   });
 })();
 </script>
+{{if not .Signed}}<script>
+// the hero: a site's day, drawn as the badge draws it (badge.py: its
+// palette, its number wheels, its lamp) on a grid of 2px cells whose
+// edges fall on whole device pixels at any scale. The day is the
+// reader's own: the hours gone are full, and the one under way fills as
+// readers arrive, an orange dot each, which rolls the counter on and
+// lights the lamp. An hour takes seconds; after midnight the day slides
+// off and the next begins. A reader who asks for less motion gets the
+// first frame alone, and a hidden tab draws nothing.
+(() => {
+  const cv = document.getElementById("hero");
+  if (!cv || !cv.getContext || !window.ResizeObserver) return;
+  const g = cv.getContext("2d");
+  const INK = { K: "#262626", k: "#000", W: "#fff", I: "#333399", L: "#9999ff", O: "#ff6600", o: "#ffcc99",
+    r: "#a84400", R: "#552200", S: "#999", d: "#555", b: "#bbb", m: "#777",
+    G: "#ccccff", g: "#ebebff" }; // and yesterday, behind: the lavender, paled
+  const DIGITS = [".###. #...# #...# #...# #...# #...# .###.", "..#.. .##.. ..#.. ..#.. ..#.. ..#.. .###.",
+    ".###. #...# ....# ...#. ..#.. .#... #####", ".###. #...# ....# ..##. ....# #...# .###.",
+    "...#. ..##. .#.#. #..#. ##### ...#. ...#.", "##### #.... ####. ....# ....# #...# .###.",
+    "..##. .#... #.... ####. #...# #...# .###.", "##### ....# ...#. ..#.. .#... .#... .#...",
+    ".###. #...# #...# .###. #...# #...# .###.", ".###. #...# #...# .#### ....# ...#. .##.."].map(d => d.split(" "));
+  const LAMP = ".###. ##### ##### ##### .###.".split(" ");
+  const GLOW = "..###.. .#...#. #.....# #.....# #.....# .#...#. ..###..".split(" ");
+  // an hour's readers, the busiest 1: quiet small hours, a morning
+  // climb, the afternoon's top, a long evening; each day a little
+  // different, and yesterday's drawn pale behind today's
+  const DAY = [.14, .10, .08, .07, .08, .12, .22, .36, .52, .66, .76, .84, .88, .92, 1, .96, .90, .82, .74, .70, .66, .56, .40, .26];
+  const day = () => DAY.map(f => Math.max(1, Math.round(f * 14 * (.8 + .4 * Math.random())))); // readers an hour
+  const CELLS = 2; // of bar a reader
+  let ago = day(), need = day();
+
+  const t0 = new Date();
+  let hour = t0.getHours();
+  const seen = need.map((n, i) => i < hour ? n : i === hour ? Math.floor(n * t0.getMinutes() / 60) : 0);
+  let count = 1997, shown = count; // the counter opens where the badge does
+  let dots = [], lit = 0, next = 0.8, night = -1;
+
+  // the layout, in cells: the counter at the chart's left with the lamp
+  // beside it, and the readers falling from the sky to their right
+  let cols = 0, rows = 0, sx = 1, sy = 1, left = 0, pitch = 0, bw = 0, gap = 0, CX = 0, LX = 0;
+  const CY = 5, LY = 9;
+  const box = (x, y, w, h, c) => {
+    const x0 = Math.round(x * sx), y0 = Math.round(y * sy);
+    g.fillStyle = INK[c];
+    g.fillRect(x0, y0, Math.round((x + w) * sx) - x0, Math.round((y + h) * sy) - y0);
+  };
+  const grid = (art, x, y, c) => art.forEach((row, r) => { for (let j = 0; j < row.length; j++) if (row[j] === "#") box(x + j, y + r, 1, 1, c); });
+  const height = i => i === hour ? Math.max(1, seen[i] * CELLS) : seen[i] * CELLS; // the hour under way shows from its first minute
+  // where each wheel stands for a count, odometer fashion (badge.py's positions)
+  const positions = v => [0, 1, 2, 3, 4].map(n => {
+    const p = 10 ** (4 - n);
+    return p === 1 ? v : Math.floor(v / p) + Math.max(0, v % p - (p - 1));
+  });
+  const wheel = (n, pos) => {
+    const x0 = CX + 1 + n * 8, y0 = CY + 1;
+    box(x0, y0, 7, 11, "k");
+    const [on, turning, away] = n === 4 ? ["O", "r", "R"] : ["W", "b", "m"];
+    const d = Math.floor(pos), off = Math.round((pos - d) * 10);
+    for (let k = -1; k <= 1; k++) {
+      const top = y0 + 2 - off + k * 10;
+      DIGITS[(((d + k) % 10) + 10) % 10].forEach((row, r) => {
+        const y = top + r;
+        if (y < y0 || y > y0 + 10) return;
+        // the wheel's curve: a number dims as it turns away
+        const c = y === y0 || y === y0 + 10 ? away : y === y0 + 1 || y === y0 + 9 ? turning : on;
+        for (let j = 0; j < 5; j++) if (row[j] === "#") box(x0 + 1 + j, y, 1, 1, c);
+      });
+    }
+  };
+  // a dot's way down: it drifts across as it starts to fall, and drops
+  // straight onto the bar at the end
+  const at = (d, t) => {
+    const tx = left + hour * pitch + Math.floor((bw - 2) / 2), ty = rows - height(hour) - 2;
+    const s = t * t * (3 - 2 * t);
+    return [Math.round(d.x + (tx - d.x) * s), Math.round(-2 + (ty + 2) * t * t)];
+  };
+  const shift = () => {
+    if (night < 1.5) return 0;
+    const u = Math.min(1, (night - 1.5) / 1.8);
+    return Math.round((u < .5 ? 2 * u * u : 1 - 2 * (1 - u) * (1 - u)) * 24 * pitch);
+  };
+
+  const draw = () => {
+    g.fillStyle = "#fff";
+    g.fillRect(0, 0, cv.width, cv.height);
+    const sh = shift();
+    for (let i = 0; i < 24; i++) {
+      const h = ago[i] * CELLS, x = left + i * pitch;
+      box(x, rows - h, bw, 1, "G");
+      box(x, rows - h + 1, bw, h - 1, "g");
+    }
+    for (let i = 0; i < 24; i++) {
+      const h = height(i), x = left + i * pitch - sh, x0 = Math.max(x, left), w = x + bw - x0;
+      if (!h || w <= 0) continue;
+      const now = i === hour;
+      box(x0, rows - h, w, 1, now ? "O" : "I");
+      if (h > 1) box(x0, rows - h + 1, w, h - 1, now ? "o" : "L");
+    }
+    for (const d of dots) {
+      const [x, y] = at(d, d.t), [px, py] = at(d, Math.max(0, d.t - .07));
+      if (px !== x || py !== y) box(px, py, 2, 2, "o");
+      box(x, y, 2, 2, "O");
+    }
+    // the counter's case, sunk into the face, and its wheels
+    box(CX - 1, CY - 1, 42, 1, "S");
+    box(CX - 1, CY - 1, 1, 14, "S");
+    box(CX, CY, 41, 13, "K");
+    box(CX + 1, CY + 1, 39, 11, "d");
+    positions(shown).forEach((p, n) => wheel(n, p));
+    grid(LAMP, LX, LY, "O");
+    box(LX + 1, LY + 1, 1, 1, lit > 0 ? "W" : "o");
+    if (lit > 0) grid(GLOW, LX - 1, LY - 1, "o");
+  };
+
+  const step = dt => {
+    if (shown < count) shown = Math.min(count, shown + dt * Math.max(5, (count - shown) * 8));
+    lit = Math.max(0, lit - dt);
+    if (night >= 0) { // the day is whole: a pause, then it slides off
+      night += dt;
+      if (night > 3.6) { ago = need; need = day(); seen.fill(0); hour = 0; night = -1; next = 1.2; }
+      return;
+    }
+    next -= dt;
+    if (next <= 0 && seen[hour] + dots.length < need[hour]) {
+      const lo = LX + 10, hi = left + 24 * pitch - gap - 4;
+      dots.push({ x: lo + Math.random() * Math.max(1, hi - lo), t: 0, dur: 1.5 + Math.random() * .6 });
+      next = (.9 + 1.8 * (1 - DAY[hour])) * (.6 + .8 * Math.random());
+    }
+    for (const d of dots) d.t += dt / d.dur;
+    for (const d of dots.filter(d => d.t >= 1)) {
+      dots.splice(dots.indexOf(d), 1);
+      seen[hour]++; count++; lit = .3;
+    }
+    if (seen[hour] >= need[hour] && !dots.length && ++hour === 24) night = 0;
+  };
+  // only a frame that differs from the last is drawn
+  const key = () => [Math.round(shown * 10), lit > 0, hour, seen[Math.min(hour, 23)], shift(), dots.map(d => at(d, d.t) + "/" + at(d, Math.max(0, d.t - .07))).join()].join();
+
+  let drawn = "", last = 0, run = false;
+  const tick = ms => {
+    step(Math.min(.1, last ? (ms - last) / 1000 : 0));
+    last = ms;
+    const k = key();
+    if (k !== drawn) { drawn = k; draw(); }
+    requestAnimationFrame(tick);
+  };
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const fit = (w, h, dp) => {
+    if (!w || !h) return;
+    cv.width = dp ? dp.inlineSize : Math.round(w * devicePixelRatio);
+    cv.height = dp ? dp.blockSize : Math.round(h * devicePixelRatio);
+    cols = Math.floor(w / 2); rows = Math.floor(h / 2);
+    sx = cv.width / w * 2; sy = cv.height / h * 2;
+    pitch = Math.max(3, Math.min(9, Math.floor((cols - 12) / 24)));
+    gap = pitch >= 7 ? 2 : 1; bw = pitch - gap;
+    left = Math.floor((cols - (24 * pitch - gap)) / 2);
+    CX = left + 1; LX = CX + 45;
+    drawn = ""; draw();
+    if (!still && !run) { run = true; requestAnimationFrame(tick); }
+  };
+  // drawn before the page is first shown, and again whenever its size
+  // changes: then in the exact device pixels where the browser says, and
+  // believably (an emulated scale reports CSS pixels there)
+  const r0 = cv.getBoundingClientRect();
+  fit(r0.width, r0.height, null);
+  const ro = new ResizeObserver(es => {
+    const e = es[0], w = e.contentRect.width;
+    let dp = e.devicePixelContentBoxSize && e.devicePixelContentBoxSize[0];
+    if (dp && Math.abs(dp.inlineSize - w * devicePixelRatio) > 1.5) dp = null;
+    fit(w, e.contentRect.height, dp);
+  });
+  try { ro.observe(cv, { box: "device-pixel-content-box" }); } catch (e) { ro.observe(cv); }
+})();
+</script>{{end}}
 </body>
 </html>{{end}}
 
@@ -446,6 +625,14 @@ a.btn { cursor: default; } /* a button that is a link is still a button: no hand
 #welcome .say { display: flex; flex-wrap: wrap; align-items: flex-end; align-content: flex-end; gap: 6px 12px; min-height: 32px; }
 #welcome .wbtn { display: inline-flex; align-items: center; gap: 5px; }
 #welcome .wbtn img { width: 14px; height: 14px; display: block; flex: none; }
+/* the welcome's hero: a day of a site's readers in the badge's palette
+   (badge.py), on a canvas as wide as the frame; the frame's border is
+   the line over it, and the line under it is its own */
+#welcome .hero { background: #fff; border-bottom: 1px solid #262626; }
+#welcome .hero canvas { display: block; width: 100%; height: 96px;
+  image-rendering: pixelated; } /* off the device grid it still keeps whole pixels */
+/* what it is, a word a point, laid out as the account's facts are */
+dl.points { gap: 8px 12px; }
 /* leave room for two 20px wallet buttons when the choices wrap */
 @media (max-width: 479px) { #welcome .say { min-height: 46px; } }
 /* the tiers, and an account's facts: a sunken white list of 18px rows */
