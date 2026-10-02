@@ -222,9 +222,11 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     ok(sHref === `/sites/${siteId}/settings`, 'Settings… leads to the site\'s settings', sHref);
     // the views to come fall into the day as dots: count each one made
     await page.evaluate(() => {
-      window.__dots = 0;
-      new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if (n.className === 'dot') window.__dots++; })))
-        .observe(document.getElementById('sites'), { subtree: true, childList: true });
+      window.__dots = 0; window.__hits = 0;
+      new MutationObserver(ms => ms.forEach(m => {
+        m.addedNodes.forEach(n => { if (n.className === 'dot') window.__dots++; });
+        if (m.type === 'attributes' && m.target.tagName === 'I' && m.target.classList.contains('hit')) window.__hits++;
+      })).observe(document.getElementById('sites'), { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] });
     });
     // and the lamp lights when a word brings views: watch its highlight cell
     await page.evaluate(() => {
@@ -287,8 +289,9 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
       await page.evaluate(() => [document.querySelector('.site .wheels').getAttribute('aria-label'), document.querySelector('.site .onn').textContent, document.getElementById('used').textContent]));
     ok(await page.evaluate(() => window.__lit), 'the lamp lit for a word that brought views');
     await page.waitForFunction(() => !document.querySelector('.site .dot'), null, { timeout: 5000 }).catch(() => {});
-    const fell = await page.evaluate(() => [window.__dots, document.querySelectorAll('.site .dot').length]);
+    const fell = await page.evaluate(() => [window.__dots, document.querySelectorAll('.site .dot').length, window.__hits]);
     ok(fell[0] >= 2 && fell[0] <= 3 && fell[1] === 0, 'the three views fell into the hour as dots, by the log of each word\'s count, and every one has landed', fell);
+    ok(fell[2] >= 1 && await page.evaluate(() => !document.querySelector('.site .bars i.hit')), 'a dot landing splashes the cap, and the splash passes', fell);
 
     // ---- the Sites window draws the day: a bar an hour, the views in the hour still filling ----
     await page.reload();

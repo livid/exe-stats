@@ -153,12 +153,12 @@ const pix = (() => {
 // the numbers live: each site's day and the month's count, from the
 // server's stream while the page is seen (homelive.go); a stream with no
 // word for a minute is dropped and another opened. A row's views are on
-// the hero's wheels, and its lamp lights for each word that brings more;
-// those readers arrive as the hero's do: orange dots fall into the hour
-// under way, as many as the views' count has digits, and one more (a
-// view is one dot, 2-9 two, 10-99 three, six at most), and as each lands
-// the bar steps up and the wheels roll on to it. A new hour, a day drawn
-// anew, or a reader who asks for less motion is drawn as it is.
+// the hero's wheels; the readers a word brings arrive as the hero's do:
+// orange dots fall into the hour under way, two steps of them to a power
+// of ten (a view is one dot, 2-4 two, 5-9 three, 10-49 four, eight at
+// most), and as each lands its cap splashes, the bar steps up, the wheels
+// roll on to it and the lamp lights. A new hour, a day drawn anew, or a
+// reader who asks for less motion is drawn as it is.
 (() => {
   const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const words = n => (n === 1 ? "1 view" : n.toLocaleString("en-US") + " views");
@@ -242,6 +242,12 @@ const pix = (() => {
       bar.style.setProperty("--t", L.h + "px");
       count(d.row, L.v);
       label(d.box, L.s, L.v);
+      // the landing: the cap splashes as the lamp does, white under a peach
+      // ring, for a tenth of a second; and the lamp lights
+      bar.classList.add("hit");
+      clearTimeout(bar.hit);
+      bar.hit = setTimeout(() => bar.classList.remove("hit"), 100);
+      if (d.row.meter) d.row.meter.lit = .3;
     }
   };
   // one clock for the dots and the wheels, running while something moves
@@ -296,11 +302,12 @@ const pix = (() => {
         label(box, s, s.v);
         continue;
       }
-      // the views since the last word, as dots on their way: the bar and
-      // the wheels keep what they show until each lands; the lamp lights now
-      // dots on a log scale: 1 view, one dot; then one more for each digit of
-      // the count (digits, not log10, which lands under 3 for 1000 in places)
-      const th = s.bars[now].h, n = add > 0 ? Math.min(6, add === 1 ? 1 : String(add).length + 1) : 0, t = performance.now();
+      // the views since the last word, as dots on their way: the bar, the
+      // wheels and the lamp wait for each to land. Two steps of dots to a
+      // power of ten, at 1, 2, 5, 10, 50, 100…: told by the count's digits
+      // and its first, as log10 lands under 3 for 1000 in places
+      const lead = +String(add)[0], dots = add === 1 ? 1 : 2 * String(add).length + (lead >= 5 ? 1 : 0);
+      const th = s.bars[now].h, n = add > 0 ? Math.min(8, dots) : 0, t = performance.now();
       for (let k = 1; k <= n; k++) {
         air.push({ row, box, v: L.gv + Math.round(add * k / n), h: snap(L.gh + (th - L.gh) * k / n),
           t0: t + (k - 1) * 1500 / n + Math.random() * 300, dur: 1000 + Math.random() * 400 });
@@ -309,7 +316,7 @@ const pix = (() => {
       L.s = s; L.gv = s.v; L.gh = th;
       is[now].style.setProperty("--t", L.h + "px");
       label(box, s, L.v);
-      if (n) { if (row.meter) row.meter.lit = .3; wake(); }
+      if (n) wake();
     }
   };
   const open = () => {
@@ -872,6 +879,9 @@ dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .site .bars i::before { --h: var(--y, 0px); background: #ebebff; border-color: #ccccff; }
 .site .bars i::after { --h: var(--t, 0px); background: #9999ff; border-color: #333399; }
 .site .bars i.now::after { background: #ffcc99; border-color: #ff6600; }
+/* a dot landing: the cap white under a row of peach, as the lit lamp's
+   highlight sits in its ring, for a tenth of a second */
+.site .bars i.now.hit::after { border-top-color: #fff; box-shadow: 0 -2px 0 #ffcc99; }
 .site .bars .dot { position: absolute; left: 0; top: 0; width: 4px; height: 4px; background: #ff6600; pointer-events: none; }
 .add { display: flex; gap: 12px; align-items: center; margin: 0 0 8px; }
 .add .field { flex: 1; min-width: 0; }
