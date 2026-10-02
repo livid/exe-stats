@@ -26,17 +26,18 @@
         <dt>Tier</dt><dd><b>{{.TierName}}</b> · {{.TierLine}}</dd>
         <dt>This month</dt><dd>{{if .NoTier}}<span id="used">{{.Used}}</span> views{{else}}<span class="meter"><i id="usedbar" style="width: {{.Pct}}%"></i></span><span id="used">{{.Used}}</span> of {{.Cap}} views{{end}}</dd>
       </dl>
+      {{if .As}}<p class="notice">Read as an admin: this account's page as its owner sees it, with nothing on it that changes anything. <a href="/">Your own account</a></p>{{end}}
       {{range .Lines}}<p class="notice">{{.}}</p>{{end}}
       <p class="flash{{if .Fault}} fault{{end}}" role="status">{{if .Fault}}{{.Fault}}{{else}}{{.Note}}{{end}}</p>
-      <div class="buttons">
+      {{if not .As}}<div class="buttons">
         <form method="post" action="/v1/signout"><button class="btn">Sign Out</button></form>
         <form method="post" action="/v1/check"><button class="btn">Check Now</button></form>
-      </div>
+      </div>{{end}}
     </div>
     <div class="statusbar"><span>{{.Checked}}</span></div>
   </div>
 </div>
-<div class="window" id="sites">
+<div class="window" id="sites" data-live="/v1/home/live{{if .As}}?as={{.Addr}}{{end}}">
   <div class="titlebar"><span class="stripe"></span><span class="title">Sites</span><span class="stripe"></span></div>
   <div class="frame">
     <div class="body">
@@ -45,21 +46,22 @@
         <a class="bars" href="/sites/{{.ID}}" style="--n: {{len .Bars}}" aria-label="The desk of {{.Domain}}. Today, a bar an hour over yesterday's: {{.Today}}">{{range .Bars}}<i{{with .Class}} class="{{.}}"{{end}} style="--t: {{.H}}px; --y: {{.Y}}px"{{with .Title}} title="{{.}}"{{end}}></i>{{end}}</a>
         <div class="buttons">
           <span class="say trouble" role="status">{{.Trouble}}</span>
-          {{if not .Counting}}<form method="post" action="/v1/sites/{{.ID}}/pick"><button class="btn">Count This One</button></form>{{end}}
-          <a class="btn" href="/sites/{{.ID}}/settings">Settings…</a>
+          {{if not $.As}}{{if not .Counting}}<form method="post" action="/v1/sites/{{.ID}}/pick"><button class="btn">Count This One</button></form>{{end}}
+          <a class="btn" href="/sites/{{.ID}}/settings">Settings…</a>{{end}}
           <a class="btn" href="/sites/{{.ID}}">Open</a>
         </div>
       </div>{{else}}<p>No sites yet. Add one: its settings hand you the snippet for the head of its pages, and its desk fills as readers come.</p>{{end}}
-      <form class="add" method="post" action="/v1/sites">
+      {{if not .As}}<form class="add" method="post" action="/v1/sites">
         <input type="hidden" name="tz" id="tz" value="UTC">
         <input class="field" name="domain" placeholder="example.com" aria-label="A site's domain" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="253"{{if not .CanAdd}} disabled{{end}}>
         <button class="btn"{{if not .CanAdd}} disabled{{end}}>Add Site</button>
       </form>
-      <p class="fine flash">{{.AddWhy}}</p>
+      <p class="fine flash">{{.AddWhy}}</p>{{end}}
     </div>
-    <div class="statusbar"><span>{{.SitesLine}}</span><span>A site's days begin in your time zone</span></div>
+    <div class="statusbar"><span>{{.SitesLine}}</span><span>A site's days begin in {{if .As}}its owner's{{else}}your{{end}} time zone</span></div>
   </div>
 </div>
+{{if .Accounts}}{{template "accounts" .}}{{end}}
 {{template "tiers" .}}
 {{else}}
 <div class="window" id="welcome">
@@ -309,7 +311,7 @@ const pix = (() => {
   };
   const open = () => {
     if (es) return;
-    es = new EventSource("/v1/home/live");
+    es = new EventSource(document.getElementById("sites").dataset.live || "/v1/home/live");
     es.addEventListener("home", ev => { alive(); draw(JSON.parse(ev.data)); });
     es.addEventListener("ping", alive);
     alive();
@@ -768,6 +770,7 @@ a.btn { cursor: default; } /* a button that is a link is still a button: no hand
 .btn:disabled { color: #777; border-color: #888; box-shadow: none; }
 .btn.default { outline: 2px solid #262626; outline-offset: 1px; border-radius: 4px; }
 .statusbar > :last-child:not(:first-child) { margin-left: auto; }
+#accounts th, #accounts td { padding: 1px 4px; } /* four columns on the narrowest phone */
 .statusbar { min-height: 22px; }
 /* a row of buttons: at the lower right, 12px apart, the default last */
 .buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px 12px; margin: 12px 0; min-height: 20px; }
@@ -877,6 +880,24 @@ dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .mint.short { display: none; }
 @media (max-width: 419px) { .badgelink { display: none; } .mint { display: none; } .mint.short { display: inline; } }
 {{end}}
+
+{{/* An admin's own page: every account that holds a tier or has a
+     site, the month's busiest first, each a link to its page read as
+     its owner sees it (admin.go). */}}
+{{define "accounts"}}<div class="window" id="accounts">
+  <div class="titlebar"><span class="stripe"></span><span class="title">Accounts</span><span class="stripe"></span></div>
+  <div class="frame">
+    <div class="body">
+      <table>
+        <tr><th>Wallet</th><th>Tier</th><th>Sites</th><th>Views</th></tr>
+        {{range .Accounts}}<tr><td><a href="/?as={{.Addr}}" title="{{.Addr}}"><code>{{.Short}}</code></a></td><td>{{.Tier}}</td><td>{{.Sites}}</td><td>{{.Views}}</td></tr>
+        {{end}}
+      </table>
+      <p class="fine">An admin reads an account's page as its owner sees it, and its sites' desks; nothing read here changes anything.</p>
+    </div>
+    <div class="statusbar"><span>{{len .Accounts}} accounts</span><span>Views counted this month</span></div>
+  </div>
+</div>{{end}}
 
 {{define "tiers"}}<div class="window" id="tiers">
   <div class="titlebar"><span class="stripe"></span><span class="title">Tiers</span><span class="stripe"></span></div>

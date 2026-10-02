@@ -403,12 +403,15 @@ func (a *App) refreshIcon(e *siteEntry, id, domain string) {
 	e.icon.typ, e.icon.at, e.icon.stamp = typ, now, fmt.Sprintf("%x", sum[:8])
 }
 
-// GET /sites/{id}/icon — the site's icon, for its owner: a raster image
-// served as nothing but one.
+// GET /sites/{id}/icon — the site's icon, for its owner and an admin: a
+// raster image served as nothing but one.
 func (a *App) handleSiteIcon(w http.ResponseWriter, r *http.Request) {
 	addr := a.signedIn(r)
 	a.mu.Lock()
 	e := a.ownSite(addr, r.PathValue("id"))
+	if e == nil && a.isAdmin(addr) {
+		e = a.sites[r.PathValue("id")]
+	}
 	a.mu.Unlock()
 	if addr == "" || e == nil {
 		http.NotFound(w, r)

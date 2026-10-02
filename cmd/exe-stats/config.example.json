@@ -15,5 +15,6 @@
   ],
   "grace_days": 7,
   "grace_every_days": 30,
-  "over_factor": 2
+  "over_factor": 2,
+  "admins": []
 }

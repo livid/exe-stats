@@ -104,6 +104,13 @@ func (s *Store) account(addr string, now time.Time) (Account, error) {
 	return scanAccount(s.db.QueryRow(`SELECT `+accountCols+` FROM accounts WHERE addr=?`, addr))
 }
 
+// hasAccount says whether the wallet has signed in here, without making
+// its record as account does.
+func (s *Store) hasAccount(addr string) bool {
+	var one int
+	return s.db.QueryRow(`SELECT 1 FROM accounts WHERE addr=?`, addr).Scan(&one) == nil
+}
+
 func (s *Store) saveAccount(a Account) error {
 	_, err := s.db.Exec(`UPDATE accounts SET balance=?, checked=?, next_check=?, tier=?, short_since=?, grace_began=? WHERE addr=?`,
 		a.Balance, a.Checked, a.NextCheck, a.Tier, a.ShortSince, a.GraceBegan, a.Addr)

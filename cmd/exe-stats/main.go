@@ -56,6 +56,11 @@ type Config struct {
 	GraceDays      int `json:"grace_days"`       // a short balance keeps its tier this long
 	GraceEveryDays int `json:"grace_every_days"` // one grace in this long
 	OverFactor     int `json:"over_factor"`      // a first month over counts up to this many caps
+	// Admins are wallet addresses that may read every account — its page
+	// and live numbers (/?as=<address>), its sites' desks and icons — and
+	// change none of it (admin.go). As the hub's admins are, they are the
+	// config's to name.
+	Admins []string `json:"admins"`
 }
 
 func defaults(c Config) Config {
@@ -122,6 +127,7 @@ type App struct {
 	limit      *limiter
 	originHost string
 	secure     bool
+	admins     map[string]bool // the config's admins (admin.go)
 	log        func(string, ...any)
 	tmpl       *template.Template
 
@@ -151,7 +157,14 @@ func newApp(cfg Config, appDB *sql.DB, rpc Balancer) (*App, error) {
 		return nil, err
 	}
 	a := &App{cfg: cfg, rules: rules, store: st, rpc: rpc, limit: newLimiter(), log: log.Printf,
-		accts: map[string]*acct{}, sites: map[string]*siteEntry{}, manual: map[string]time.Time{}, iconSem: make(chan struct{}, iconBusy), done: make(chan struct{})}
+		accts: map[string]*acct{}, sites: map[string]*siteEntry{}, manual: map[string]time.Time{}, iconSem: make(chan struct{}, iconBusy), done: make(chan struct{}),
+		admins: map[string]bool{}}
+	for _, ad := range cfg.Admins {
+		if k, ok := base58Decode(ad); !ok || len(k) != 32 {
+			return nil, fmt.Errorf("config: admin %q is not a Solana address", ad)
+		}
+		a.admins[ad] = true
+	}
 	if cfg.Origin != "" {
 		u, err := url.Parse(cfg.Origin)
 		if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") {

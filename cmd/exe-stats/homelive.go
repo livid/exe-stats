@@ -131,9 +131,13 @@ func (a *App) homeNow(addr string, now time.Time) (liveHome, error) {
 
 // GET /v1/home/live — the homepage's numbers as they change.
 func (a *App) handleHomeLive(w http.ResponseWriter, r *http.Request) {
-	addr := a.signedIn(r)
+	addr, as := a.reader(r) // an admin may follow another account's page
 	if addr == "" {
 		http.Error(w, "sign in first", http.StatusUnauthorized)
+		return
+	}
+	if as && !a.store.hasAccount(addr) {
+		http.NotFound(w, r)
 		return
 	}
 	rc := http.NewResponseController(w)

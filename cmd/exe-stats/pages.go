@@ -217,6 +217,8 @@ type homeData struct {
 	MintShort         string // the mint on a phone, its ends with … between
 	Tiers             []tierRow
 	Signed            bool
+	As                bool       // an admin reads another account's page: nothing on it changes anything (admin.go)
+	Accounts          []adminRow // an admin's own page: every account, to read as
 	Addr, AddrShort   string
 	Note, Fault       string
 
@@ -323,7 +325,11 @@ func (a *App) handleHome(w http.ResponseWriter, r *http.Request) {
 	d := homeData{Host: a.host(r), Token: a.cfg.Token, Mint: a.cfg.Mint, MintShort: ends(a.cfg.Mint, 10), GraceDays: a.cfg.GraceDays, OverFactor: a.cfg.OverFactor}
 	q := r.URL.Query()
 	d.Note, d.Fault = notes[q.Get("m")], faults[q.Get("e")]
-	addr := a.signedIn(r)
+	addr, as := a.reader(r)
+	if as && !a.store.hasAccount(addr) {
+		http.NotFound(w, r)
+		return
+	}
 	tier := -1
 	if addr != "" {
 		a.mu.Lock()
@@ -335,9 +341,12 @@ func (a *App) handleHome(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		tier = ac.Tier
-		d.Signed, d.Addr, d.AddrShort = true, addr, addr[:4]+"…"+addr[len(addr)-4:]
+		d.Signed, d.As, d.Addr, d.AddrShort = true, as, addr, addr[:4]+"…"+addr[len(addr)-4:]
 		a.fill(&d, ac, r, now)
 		a.mu.Unlock()
+		if !as && a.isAdmin(addr) {
+			d.Accounts = a.adminRows(monthOf(now))
+		}
 		for i := range d.Sites { // each site's day, read with the app unheld
 			if row := &d.Sites[i]; row.st != nil {
 				if err := row.today(now); err != nil {
@@ -607,7 +616,7 @@ func (a *App) handlePickSite(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /sites/{id} and /v1/sites/{id}/stats — a site's desk and its
-// JSON, for its owner alone.
+// JSON, for its owner, and to read for an admin.
 func (a *App) handleDesk(w http.ResponseWriter, r *http.Request) {
 	addr := a.signedIn(r)
 	if addr == "" {
@@ -616,7 +625,7 @@ func (a *App) handleDesk(w http.ResponseWriter, r *http.Request) {
 	}
 	a.mu.Lock()
 	e := a.sites[r.PathValue("id")]
-	if e == nil || e.site.Addr != addr {
+	if e == nil || (e.site.Addr != addr && !a.isAdmin(addr)) {
 		a.mu.Unlock()
 		http.NotFound(w, r)
 		return

@@ -218,6 +218,13 @@ the server issued for that address, never a transaction; the address is
 the account. A session is an `HttpOnly`, `SameSite=Lax` cookie whose hash,
 not its value, is stored.
 
+**Admins** are the wallet addresses the config's `admins` names, as the
+hub's are. An admin's own page lists every account that holds a tier or
+has a site, the month's busiest first, and `/?as=<address>` is that
+account's page as its owner sees it — its numbers live, its sites' desks
+and icons a press away — with every control that would change something
+left off. Whatever changes something still answers to the owner alone.
+
 **Tiers** follow what the wallet holds of `mint`, read over RPC
 (`getTokenAccountsByOwner`): how many sites count, and how many page
 views a calendar month (UTC) over all of them. The numbers are the
