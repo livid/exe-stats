@@ -307,8 +307,8 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
       "the day is a bar an hour, this hour's the busiest and still filling, in the hero's orange", day);
     ok(day.ghost[0] === 'rgb(235, 235, 255)' && day.ghost[1] === '0px', 'yesterday stands pale behind each hour: empty, as nothing came yesterday', day.ghost);
     ok(day.tv === '3 views today · 1 online' && day.oneLine, "who is on it and its views on the wheels, on the name's line before Counting", day);
-    ok(Math.round(day.w) === Math.round(day.rw) && day.first === 0 && day.last === 0 && Math.round(day.h) === 49 && day.sky === 8 && day.slot === 40 && day.floor.startsWith('1px solid'),
-      'the day is the row wide, 40px under 8px of sky and over a floor line', day);
+    ok(Math.round(day.w) === Math.round(day.rw) && day.first === 0 && day.last === 0 && Math.round(day.h) === 55 && day.sky === 14 && day.slot === 40 && day.floor.startsWith('1px solid'),
+      'the day is the row wide, 40px under 14px of sky and over a floor line', day);
     ok(await page.locator('.site .bars').getAttribute('href') === `/sites/${siteId}` && await page.locator('.site .bars').evaluate(e => getComputedStyle(e).cursor) === 'pointer',
       'the day is a press to the desk, and the pointer says so');
     const btnCursors = await page.locator('.site .buttons .btn').evaluateAll(bs => bs.map(b => getComputedStyle(b).cursor));
