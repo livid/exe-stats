@@ -1,7 +1,11 @@
 package stats
 
 import (
+	"database/sql"
 	"net/http/httptest"
+	"net/url"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -258,5 +262,74 @@ func TestAlias(t *testing.T) {
 	}
 	if a := Alias("zz"); a != "Visitor" {
 		t.Errorf("bad id: %q", a)
+	}
+}
+
+// A beacon's hit is the page the script reports, read by whoever sent
+// the beacon: the path, the source and the campaign come from the
+// PageView, and the visitor is counted for the site, not for the
+// collector's own host.
+func TestRecordPageView(t *testing.T) {
+	d := openTestDB(t)
+	c, err := NewCollector(d, time.UTC)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := httptest.NewRequest("POST", "https://collector.example/e", nil)
+	r.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36")
+	r.Header.Set("CF-IPCountry", "JP")
+	r.Header.Set("Referer", "https://shop.example/tea") // the beacon's own referrer is the page, not the source
+	c.RecordPageView(r, "page", PageView{Host: "shop.example", Path: "/tea",
+		Query: url.Values{"utm_campaign": {"spring"}}, Referrer: "https://www.google.com/search?q=tea"})
+	h, ok := c.take()
+	if !ok {
+		t.Fatal("no hit queued")
+	}
+	if h.Path != "/tea" || h.Ref != "Google" || h.Channel != "search" || h.UTMCampaign != "spring" || h.Country != "JP" || h.Browser != "Chrome" {
+		t.Fatalf("hit = %+v", h)
+	}
+	// the next page, reached from the site itself, is the same visit:
+	// the site is no source, and the session keeps the one it came in by
+	c.RecordPageView(r, "page", PageView{Host: "shop.example", Path: "/cart", Referrer: "https://shop.example/tea"})
+	if h2, _ := c.take(); h2.VID != h.VID || h2.SID != h.SID || h2.Entry || h2.Ref != "Google" {
+		t.Fatalf("second hit = %+v, first %+v", h2, h)
+	}
+	// the same reader on another site is another visitor
+	c.RecordPageView(r, "page", PageView{Host: "other.example", Path: "/"})
+	if h3, _ := c.take(); h3.VID == h.VID {
+		t.Fatal("one visitor id across two sites")
+	}
+}
+
+// A desk mounted at a path of its own writes every link there.
+func TestDeskPath(t *testing.T) {
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "p.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	db.SetMaxOpenConns(1)
+	s, err := New(db, Options{Path: "/sites/abc", JSONPath: "/v1/sites/abc/stats"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, httptest.NewRequest("GET", "/sites/abc?range=30d", nil))
+	body := w.Body.String()
+	if w.Code != 200 || !strings.Contains(body, `href="/sites/abc?range=7d"`) || strings.Contains(body, `href="/stats`) {
+		t.Fatalf("desk at /sites/abc: code %d, own links %v, /stats links %v", w.Code,
+			strings.Contains(body, `href="/sites/abc?range=7d"`), strings.Contains(body, `href="/stats`))
+	}
+	if !strings.Contains(body, `u.pathname !== "/sites/abc"`) {
+		t.Fatal("the desk's script does not know its path")
+	}
+	p, err := s.PageData(httptest.NewRequest("GET", "/sites/abc?range=30d", nil))
+	if err != nil || p.JSON != "/v1/sites/abc/stats?range=30d" {
+		t.Fatalf("JSON link = %q, %v", p.JSON, err)
+	}
+	w = httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, httptest.NewRequest("GET", "/v1/sites/abc/stats", nil))
+	if w.Code != 200 || !strings.HasPrefix(w.Header().Get("Content-Type"), "application/json") {
+		t.Fatalf("JSON at its path: %d %s", w.Code, w.Header().Get("Content-Type"))
 	}
 }

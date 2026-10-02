@@ -534,6 +534,7 @@ type Page struct {
 	Host      string // the host it was served for
 	HomeURL   string // where the close box leads (Options.HomeURL)
 	HomeLabel string
+	Path      string // where the desk is served (Options.Path)
 	// LiveHeader is the mark the page's own refetches wear so they are
 	// not counted as visits (Options.LiveHeader).
 	LiveHeader string
@@ -629,9 +630,12 @@ var listViews = []struct {
 // Query is the page's URL state: the range, each window's view and
 // the filters; withParam and withoutParam derive a neighbouring view's
 // URL from it.
-type Query struct{ v url.Values }
+type Query struct {
+	v    url.Values
+	base string // the desk's path (Options.Path)
+}
 
-func queryOf(q url.Values) Query {
+func queryOf(q url.Values, base string) Query {
 	keep := url.Values{}
 	for _, k := range []string{"range", "src", "pg", "loc", "dev", "bt"} {
 		if v := q.Get(k); v != "" {
@@ -643,7 +647,7 @@ func queryOf(q url.Values) Query {
 			keep.Set(d.param, v)
 		}
 	}
-	return Query{keep}
+	return Query{keep, base}
 }
 
 func (q Query) with(k, v string) string {
@@ -657,9 +661,9 @@ func (q Query) with(k, v string) string {
 		c.Set(k, v)
 	}
 	if len(c) == 0 {
-		return "/stats"
+		return q.base
 	}
-	return "/stats?" + c.Encode()
+	return q.base + "?" + c.Encode()
 }
 
 func (q Query) String() string { return q.with("", "") }
@@ -670,7 +674,7 @@ func (q Query) withBot(k, v string) string {
 	if q.v.Get("bot") != "" {
 		return q.with(k, v)
 	}
-	c := Query{url.Values{}}
+	c := Query{url.Values{}, q.base}
 	for key, vals := range q.v {
 		c.v[key] = vals
 	}
@@ -687,7 +691,7 @@ func (s *Stats) PageData(r *http.Request) (*Page, error) {
 	now := time.Now()
 	sp := spanOf(q.Get("range"), now, s.coll.Location())
 	f := filterOf(q)
-	sq := queryOf(q)
+	sq := queryOf(q, s.opt.Path)
 	// each window's view, the first when the query names none or a stranger
 	var want []string
 	views := map[string]string{}
@@ -712,7 +716,7 @@ func (s *Stats) PageData(r *http.Request) (*Page, error) {
 	p := &Page{Report: rep.clone(), Default: defaultRange, Online: rep.Live.Online,
 		Recent: append([]LiveRow(nil), rep.Live.Recent...), Zone: rep.Zone,
 		ZoneAbbr: now.In(s.coll.Location()).Format("MST")}
-	p.JSON = strings.Replace(sq.String(), "/stats", "/v1/stats", 1)
+	p.JSON = s.opt.JSONPath + strings.TrimPrefix(sq.String(), s.opt.Path)
 	for _, rg := range ranges {
 		p.Ranges = append(p.Ranges, View{Key: rg.key, Label: rg.label, URL: sq.with("range", rg.key), On: rg.key == sp.Key})
 	}
@@ -776,7 +780,7 @@ func (s *Stats) PageData(r *http.Request) (*Page, error) {
 	}
 	p.Span = spanWords(sp)
 	p.Title, p.Host = s.opt.Title, r.Host
-	p.HomeURL, p.HomeLabel, p.LiveHeader = s.opt.HomeURL, s.opt.HomeLabel, s.opt.LiveHeader
+	p.HomeURL, p.HomeLabel, p.LiveHeader, p.Path = s.opt.HomeURL, s.opt.HomeLabel, s.opt.LiveHeader, s.opt.Path
 	return p, nil
 }
 

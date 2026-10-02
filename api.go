@@ -88,6 +88,11 @@ type Options struct {
 	// HomeURL is where the desk's close box leads, and HomeLabel is what
 	// it says. Defaults "/" and "Home".
 	HomeURL, HomeLabel string
+	// Path is where the desk is served and JSONPath where its JSON is:
+	// every link the desk writes points at Path, so a host that keeps
+	// one desk per site mounts each at a path of its own. Defaults
+	// "/stats" and "/v1/stats".
+	Path, JSONPath string
 }
 
 // Stats is the counting and the report: one per database.
@@ -122,6 +127,12 @@ func New(db *sql.DB, o Options) (*Stats, error) {
 	}
 	if o.HomeLabel == "" {
 		o.HomeLabel = "Home"
+	}
+	if o.Path == "" {
+		o.Path = "/stats"
+	}
+	if o.JSONPath == "" {
+		o.JSONPath = "/v1/stats"
 	}
 	if db == nil {
 		return nil, errors.New("stats: no database")
@@ -216,11 +227,12 @@ func (s *Stats) PageHandler() http.Handler { return http.HandlerFunc(s.ServePage
 func (s *Stats) JSONHandler() http.Handler { return http.HandlerFunc(s.ServeJSON) }
 
 // Handler is both, under the paths the page's own links use: GET /stats
-// and GET /v1/stats. It counts nothing itself.
+// and GET /v1/stats, or Options.Path and Options.JSONPath. It counts
+// nothing itself.
 func (s *Stats) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.Handle("GET /stats", s.PageHandler())
-	mux.Handle("GET /v1/stats", s.JSONHandler())
+	mux.Handle("GET "+s.opt.Path, s.PageHandler())
+	mux.Handle("GET "+s.opt.JSONPath, s.JSONHandler())
 	return mux
 }
 

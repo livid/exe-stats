@@ -16,6 +16,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -205,21 +206,37 @@ func newID() string {
 // the caller has decided (Wanted) that the request was a person opening
 // a page. A crawler's request is dropped here, by its user agent.
 func (c *Collector) Record(r *http.Request, kind string) {
+	c.RecordPageView(r, kind, PageView{Host: r.Host, Path: r.URL.Path, Query: r.URL.Query(), Referrer: r.Referer()})
+}
+
+// PageView is the page a hit is for, when it is not the request's own: a
+// script on somebody's page reports the page it runs on in a beacon, and
+// the beacon's request then says who is reading (the address, the
+// browser, the country, the language) while the View says what.
+type PageView struct {
+	Host     string     // the site: the visitor's id is per host, and a referrer from it is no source
+	Path     string     // the page
+	Query    url.Values // the page's query, read for utm_source, utm_medium and utm_campaign
+	Referrer string     // where the reader came from: document.referrer
+}
+
+// RecordPageView queues one page view of v, read by whoever sent r.
+func (c *Collector) RecordPageView(r *http.Request, kind string, v PageView) {
 	ua := r.UserAgent()
 	device, browser, os, bot := Classify(ua)
 	now := time.Now()
 	h := Hit{
-		TS: now.UnixMilli(), Path: clip(r.URL.Path, 256), Kind: kind,
+		TS: now.UnixMilli(), Path: clip(v.Path, 256), Kind: kind,
 		Device: device, Browser: browser, OS: os, Bot: bot,
 		Country: country(r.Header.Get("CF-IPCountry")),
 		Region:  clip(r.Header.Get("CF-Region"), 64),
 		City:    clip(r.Header.Get("CF-IPCity"), 64),
 		Lang:    Language(r.Header.Get("Accept-Language")),
 	}
-	h.VID = c.visitor(now, ClientIP(r), ua, r.Host)
-	q := r.URL.Query()
+	h.VID = c.visitor(now, ClientIP(r), ua, v.Host)
+	q := v.Query
 	h.UTMSource, h.UTMMedium, h.UTMCampaign = clip(q.Get("utm_source"), 64), clip(q.Get("utm_medium"), 64), clip(q.Get("utm_campaign"), 64)
-	h.Ref, h.Channel = Source(r.Referer(), r.Host)
+	h.Ref, h.Channel = Source(v.Referrer, v.Host)
 	if h.Ref == "" && h.UTMSource != "" {
 		// a tagged link: the campaign names the source, wherever the click came from
 		h.Ref, h.Channel = h.UTMSource, "campaign"

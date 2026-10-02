@@ -261,7 +261,7 @@ try {
     const a = e.target.closest("a[href]");
     if (!a || e.button) return;
     const u = new URL(a.href), tab = e.metaKey || e.ctrlKey || e.shiftKey || e.altKey; // a new tab is still a new tab
-    if (u.origin !== location.origin || u.pathname !== "/stats") { if (!tab) turn++; return; } // leaving
+    if (u.origin !== location.origin || u.pathname !== {{$.Path}}) { if (!tab) turn++; return; } // leaving
     // a pressed range is the one the next visit opens on (statshead) —
     // pressed into a new tab too, and the held one again to keep a range a link brought
     if (a.closest(".ranges")) try { localStorage.setItem("exe-hub-stats-range", u.searchParams.get("range")); } catch (e) {}
