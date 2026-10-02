@@ -926,3 +926,43 @@ func TestLivePendingCopied(t *testing.T) {
 		t.Fatalf("after a reused buffer:\n live %s\n hits %s", got, want)
 	}
 }
+
+// TestToday: today's chart reads the same from memory as from the
+// store, an hour a point, the hours to come empty.
+func TestToday(t *testing.T) {
+	loc, _ := time.LoadLocation("America/Los_Angeles")
+	s := dayStats(t, loc, true)
+	now := time.Now()
+	seedDays(t, s.db, loc, now, 2)
+	s.noLive = true
+	want, err := s.Today(now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.noLive = false
+	if err := s.loadLive(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Today(now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gb, _ := json.Marshal(got)
+	wb, _ := json.Marshal(want)
+	if string(gb) != string(wb) || len(got) < 23 || len(got) > 25 {
+		t.Fatalf("today from memory %s, from the store %s", gb, wb)
+	}
+	views := 0
+	for _, p := range got {
+		if p.Future && p.Pageviews != 0 {
+			t.Fatalf("views in an hour to come: %+v", p)
+		}
+		views += p.Pageviews
+	}
+	var store int
+	n := now.In(loc)
+	s.db.db.QueryRow(`SELECT COUNT(*) FROM hits WHERE bot = 0 AND ts >= ?`, midnight(n.Year(), n.Month(), n.Day(), loc).UnixMilli()).Scan(&store)
+	if views != store {
+		t.Fatalf("the chart holds %d views, the store %d", views, store)
+	}
+}

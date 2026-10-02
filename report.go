@@ -487,6 +487,19 @@ func series(sp Span, c counts, now time.Time) []Point {
 	return pts
 }
 
+// Today is today's chart: a point an hour from the zone's midnight to
+// the next, the hours still to come Future, page views and visitors of
+// people alone — read from memory where it can be, so a list of sites
+// can draw each one's day.
+func (s *Stats) Today(now time.Time) ([]Point, error) {
+	sp := spanOf("today", now, s.coll.Location())
+	c, err := s.over(Filter{}, sp.From, sp.To, now, want{hours: true})
+	if err != nil {
+		return nil, err
+	}
+	return series(sp, c, now), nil
+}
+
 func ago(d time.Duration) string {
 	switch {
 	case d < 5*time.Second:
