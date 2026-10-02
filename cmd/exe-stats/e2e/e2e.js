@@ -150,12 +150,16 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     // ---- add a site, get the snippet ----
     await page.fill('.add .field', 'https://www.shop.example/some/page');
     await Promise.all([page.waitForNavigation(), page.click('.add .btn')]);
-    const snippet = await page.locator('.site .snip').inputValue();
+    ok(/\/sites\/[0-9a-f]{12}\/settings$/.test(page.url()), "Add Site leads on to the new site's settings", page.url());
+    const snippet = await page.locator('#snip').inputValue();
     siteId = (snippet.match(/data-site="([0-9a-f]{12})"/) || [])[1] || '';
-    ok(siteId && snippet === `<script defer data-site="${siteId}" src="${APP}/js/s.js"></script>`, 'the site has its snippet', snippet);
+    ok(siteId && snippet === `<script defer data-site="${siteId}" src="${APP}/js/s.js"></script>`, 'its settings hand out its snippet', snippet);
+    await page.goto(APP + '/');
+    ok(await page.locator('#sites .snip, #sites .copy').count() === 0, 'the Sites window carries no snippet');
     ok((await page.locator('.site .name').innerText()) === 'shop.example', 'the domain is read out of a pasted address');
     ok((await page.locator('.site .st').innerText()) === 'Counting', 'the site counts');
-    for (const sel of ['.site .snip', '.add .field', '.add .btn', '.site .buttons .btn']) {
+    ok((await page.locator('.site .tv').innerText()) === '0 views today', "the site's day is empty yet", await page.locator('.site .tv').innerText());
+    for (const sel of ['.add .field', '.add .btn', '.site .buttons .btn']) {
       const b = await box(page, sel);
       ok(Math.round(b.height) === 20, sel + ' is 20px high', b);
     }
@@ -205,6 +209,16 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     ok(set.errors.length === 0, 'no script errors on the settings page', set.errors);
     await shot(set, 'settings-ok-dpr1');
     await set.close();
+
+    // ---- the Sites window draws the day: a bar an hour, the views in the hour still filling ----
+    await page.reload();
+    const day = await page.evaluate(() => {
+      const bars = [...document.querySelectorAll('.site .bars i')], b = document.querySelector('.site .bars').getBoundingClientRect();
+      return { n: bars.length, now: bars.filter(x => x.className === 'now').map(x => x.getBoundingClientRect().height),
+        to: bars.filter(x => x.className === 'to').length, w: b.width, h: b.height, tv: document.querySelector('.site .tv').textContent };
+    });
+    ok(day.n >= 23 && day.n <= 25 && day.now.length === 1 && day.now[0] === 24, "the day is a bar an hour, this hour's the busiest and still filling", day);
+    ok(day.tv === '3 views today' && Math.round(day.w) === 8 * day.n + 4 && Math.round(day.h) === 30, 'its views in words, and the box is the whole day wide', day);
 
     // ---- the desk ----
     await Promise.all([page.waitForNavigation(), page.click('.site .name')]);
@@ -305,6 +319,8 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
       ok(Math.round(b.height) === 20, `${tag}: account buttons are 20px high`, b);
       const tops = await c.page.locator('.site .buttons .btn').evaluateAll(bs => bs.filter(x => x.offsetParent).map(x => Math.round(x.getBoundingClientRect().top)));
       ok(tops.length >= 3 && tops.every(t => t === tops[0]), `${tag}: a site's buttons are one row`, tops);
+      const bars = await c.page.evaluate(() => [...document.querySelectorAll('.site .bars i')].map(x => x.getBoundingClientRect().width));
+      ok(bars.length > 0 && bars.every(w => w === 6), `${tag}: a site's bars are 6px wide`, bars.slice(0, 3));
       await shot(c.page, 'account-' + tag);
       await c.page.goto(`${APP}/sites/${siteId}/settings`);
       ok(await c.page.locator('#setup.ok').count() === 1 && await noScroll(c.page), `${tag}: the settings show the green check and do not scroll sideways`);

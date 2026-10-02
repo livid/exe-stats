@@ -48,6 +48,13 @@ CREATE TABLE IF NOT EXISTS sites (
   UNIQUE (addr, domain)
 );
 CREATE INDEX IF NOT EXISTS sites_addr ON sites(addr);
+CREATE TABLE IF NOT EXISTS icons (
+  site TEXT PRIMARY KEY,                   -- a site's favicon, fetched from the site (siteicon.go)
+  data BLOB,                               -- the image; NULL: the site has none
+  type TEXT NOT NULL DEFAULT '',           -- image/png …; '' none
+  at   INTEGER NOT NULL,                   -- ms: when it was fetched, or found missing
+  sha  BLOB                                -- its hash's first bytes: the img's URL changes with it
+);
 CREATE TABLE IF NOT EXISTS usage (
   addr      TEXT NOT NULL,
   month     TEXT NOT NULL,                 -- 2006-01, UTC
@@ -226,6 +233,11 @@ func (s *Store) removeSite(addr, id string) (bool, error) {
 		return false, err
 	}
 	n, _ := r.RowsAffected()
+	if n > 0 {
+		if _, err := s.db.Exec(`DELETE FROM icons WHERE site=?`, id); err != nil {
+			return true, err
+		}
+	}
 	return n > 0, nil
 }
 

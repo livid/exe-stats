@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	stats "github.com/livid/exe-stats"
 )
 
 //go:embed pages.html
@@ -30,7 +32,6 @@ func (a *App) handleScript(w http.ResponseWriter, r *http.Request) {
 // What the pages say after a press: the form answers with a redirect
 // home, and the word in the query picks the line.
 var notes = map[string]string{
-	"added":   "The site is added. Paste its snippet into the page's head.",
 	"removed": "The site and its numbers are removed.",
 	"picked":  "That site counts now.",
 	"checked": "The holding was read again.",
@@ -76,8 +77,67 @@ type tierRow struct {
 }
 
 type siteRow struct {
-	ID, Domain, Snippet string
-	Counting, Removing  bool
+	ID, Domain         string
+	Counting, Removing bool
+	Icon               bool   // the site's favicon is kept (siteicon.go)
+	Stamp              string // and its hash, in its URL
+	Bars               []barView
+	Today              string // the day's views, in words
+	st                 *stats.Stats
+}
+
+// barView is an hour of a site's day on its row: a box chartH high at
+// the busiest hour, the hour still filling lighter, those to come empty.
+type barView struct {
+	H     int
+	Class string // "" | "now" | "to"
+	Title string
+}
+
+const chartH = 24
+
+// today draws a site's day from its chart.
+func (row *siteRow) today(now time.Time) error {
+	pts, err := row.st.Today(now)
+	if err != nil {
+		return err
+	}
+	top, total, last := 0, 0, -1
+	for i, p := range pts {
+		top, total = max(top, p.Pageviews), total+p.Pageviews
+		// an hour is placed by its middle, so in a zone off by half an
+		// hour the views of the last half hour stand in the next bar:
+		// that one is still filling, not to come
+		if !p.Future || p.Pageviews > 0 {
+			last = i
+		}
+	}
+	for i, p := range pts {
+		b := barView{}
+		if t, err := time.Parse(time.RFC3339, p.T); err == nil {
+			b.Title = t.Format("15:04") + " · " + viewWords(p.Pageviews)
+		}
+		switch {
+		case i == last:
+			b.Class = "now"
+		case i > last:
+			b.Class, b.Title = "to", ""
+		}
+		if top > 0 && p.Pageviews > 0 {
+			b.H = (p.Pageviews*chartH + top - 1) / top
+		}
+		row.Bars = append(row.Bars, b)
+	}
+	row.Today = viewWords(total) + " today"
+	return nil
+}
+
+// viewWords is a count of page views in words: 1 view, 12,345 views.
+func viewWords(n int) string {
+	if n == 1 {
+		return "1 view"
+	}
+	return commas(int64(n)) + " views"
 }
 
 type homeData struct {
@@ -164,6 +224,13 @@ func (a *App) handleHome(w http.ResponseWriter, r *http.Request) {
 		d.Signed, d.Addr, d.AddrShort = true, addr, addr[:4]+"…"+addr[len(addr)-4:]
 		a.fill(&d, ac, r, now)
 		a.mu.Unlock()
+		for i := range d.Sites { // each site's day, read with the app unheld
+			if row := &d.Sites[i]; row.st != nil {
+				if err := row.today(now); err != nil {
+					a.log("home %s: %v", row.ID, err)
+				}
+			}
+		}
 	}
 	for i, t := range a.rules.Tiers {
 		d.Tiers = append(d.Tiers, tierRow{Name: t.Name, Hold: commas(t.Hold), Sites: strconv.Itoa(t.Sites), Views: short(t.Views), On: i == tier})
@@ -229,8 +296,16 @@ func (a *App) fill(d *homeData, ac *acct, r *http.Request, now time.Time) {
 		d.Lines = append(d.Lines, "Paused: the balance covers no tier, so nothing is counted. Everything counted so far is still here to read. Top up and press Check Now.")
 	}
 	for i, s := range ac.sites {
-		d.Sites = append(d.Sites, siteRow{ID: s.ID, Domain: s.Domain, Snippet: a.snippet(r, s.ID),
-			Counting: i < slots, Removing: r.URL.Query().Get("remove") == s.ID})
+		row := siteRow{ID: s.ID, Domain: s.Domain, Counting: i < slots, Removing: r.URL.Query().Get("remove") == s.ID}
+		if e := a.sites[s.ID]; e != nil {
+			row.Icon, row.Stamp = a.iconOf(e, now)
+			if st, err := a.statsOf(e); err == nil {
+				row.st = st
+			} else {
+				a.log("home %s: %v", s.ID, err)
+			}
+		}
+		d.Sites = append(d.Sites, row)
 	}
 	if ac.Tier >= 0 && len(ac.sites) > slots {
 		d.Lines = append(d.Lines, "This tier counts "+plural(slots, "site", "sites")+": the others rest. Press Count This One to choose.")
@@ -350,10 +425,12 @@ func (a *App) handleAddSite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.sites[s.ID] = &siteEntry{site: s}
+	a.iconOf(a.sites[s.ID], now) // its icon, while its owner pastes the snippet
 	if ac.sites, err = a.store.sitesOf(addr); err != nil {
 		a.log("add site: %v", err)
 	}
-	back(w, r, "m", "added")
+	// on to its settings: the snippet, and the check that waits for it
+	http.Redirect(w, r, "/sites/"+s.ID+"/settings", http.StatusSeeOther)
 }
 
 // POST /v1/sites/{id}/remove — the site and its numbers, gone.

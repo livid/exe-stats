@@ -130,6 +130,7 @@ type App struct {
 	sites   map[string]*siteEntry // every site by id
 	manual  map[string]time.Time  // the last Check Now of an address
 	checkMu sync.Mutex            // one balance check at a time
+	iconSem chan struct{}         // the site icons being fetched (siteicon.go)
 }
 
 // Balancer reads a wallet's holding; the RPC in service, a table in tests.
@@ -148,7 +149,7 @@ func newApp(cfg Config, appDB *sql.DB, rpc Balancer) (*App, error) {
 		return nil, err
 	}
 	a := &App{cfg: cfg, rules: rules, store: st, rpc: rpc, limit: newLimiter(), log: log.Printf,
-		accts: map[string]*acct{}, sites: map[string]*siteEntry{}, manual: map[string]time.Time{}}
+		accts: map[string]*acct{}, sites: map[string]*siteEntry{}, manual: map[string]time.Time{}, iconSem: make(chan struct{}, iconBusy)}
 	if cfg.Origin != "" {
 		u, err := url.Parse(cfg.Origin)
 		if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") {
@@ -194,6 +195,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /sites/{id}", a.handleDesk)
 	mux.HandleFunc("GET /v1/sites/{id}/stats", a.handleDesk)
 	mux.HandleFunc("GET /sites/{id}/settings", a.handleSettings)
+	mux.HandleFunc("GET /sites/{id}/icon", a.handleSiteIcon)
 	mux.HandleFunc("GET /v1/sites/{id}/setup", a.handleSetup)
 	mux.HandleFunc("POST /v1/sites/{id}/hosts", a.handleAddHost)
 	mux.HandleFunc("POST /v1/sites/{id}/hosts/remove", a.handleRemoveHost)
@@ -272,6 +274,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	app.warmIcons()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	go app.run(ctx)

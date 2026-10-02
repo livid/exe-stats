@@ -41,20 +41,19 @@
   <div class="frame">
     <div class="body">
       {{range .Sites}}<div class="site" id="s-{{.ID}}">
-        <div class="sline"><a class="name" href="/sites/{{.ID}}">{{.Domain}}</a><span class="st">{{if .Counting}}Counting{{else}}Resting{{end}}</span></div>
-        <input class="field snip" readonly value="{{.Snippet}}" aria-label="The snippet for {{.Domain}}">
+        <div class="sline">{{if .Icon}}<img class="ico" src="/sites/{{.ID}}/icon?v={{.Stamp}}" width="16" height="16" alt="">{{end}}<a class="name" href="/sites/{{.ID}}">{{.Domain}}</a><span class="st">{{if .Counting}}Counting{{else}}Resting{{end}}</span></div>
+        <div class="today"><span class="bars" role="img" aria-label="{{.Domain}} today, a bar an hour: {{.Today}}">{{range .Bars}}<i{{with .Class}} class="{{.}}"{{end}} style="height: {{.H}}px"{{with .Title}} title="{{.}}"{{end}}></i>{{end}}</span><span class="tv">{{.Today}}</span></div>
         {{if .Removing}}<div class="buttons">
           <span class="say">Remove {{.Domain}} and its numbers? This cannot be undone.</span>
           <a class="btn" href="/#s-{{.ID}}">Cancel</a>
           <form method="post" action="/v1/sites/{{.ID}}/remove"><button class="btn">Remove</button></form>
         </div>{{else}}<div class="buttons">
           <a class="btn" href="/?remove={{.ID}}#s-{{.ID}}">Remove…</a>
-          <button class="btn copy" type="button">Copy Snippet</button>
           {{if not .Counting}}<form method="post" action="/v1/sites/{{.ID}}/pick"><button class="btn">Count This One</button></form>{{end}}
           <a class="btn" href="/sites/{{.ID}}/settings">Settings…</a>
           <a class="btn" href="/sites/{{.ID}}">Open</a>
         </div>{{end}}
-      </div>{{else}}<p>No sites yet. Add one, paste its snippet into the head of its pages, and its desk fills as readers come.</p>{{end}}
+      </div>{{else}}<p>No sites yet. Add one: its settings hand you the snippet for the head of its pages, and its desk fills as readers come.</p>{{end}}
       <form class="add" method="post" action="/v1/sites">
         <input type="hidden" name="tz" id="tz" value="UTC">
         <input class="field" name="domain" placeholder="example.com" aria-label="A site's domain" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="253"{{if not .CanAdd}} disabled{{end}}>
@@ -86,12 +85,6 @@
   // a site's days begin where its owner is
   const tz = document.getElementById("tz");
   if (tz) try { tz.value = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"; } catch (e) {}
-  for (const f of document.querySelectorAll(".snip")) f.addEventListener("focus", () => f.select());
-  for (const b of document.querySelectorAll(".copy")) b.addEventListener("click", () => {
-    const f = b.closest(".site").querySelector(".snip");
-    f.select();
-    if (navigator.clipboard) navigator.clipboard.writeText(f.value).catch(() => {});
-  });
 
   const btn = document.getElementById("signin"), say = document.getElementById("say");
   if (!btn) return;
@@ -411,6 +404,17 @@ dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .site { padding: 0 0 4px; margin: 0 0 12px; border-bottom: 1px solid #bbb; }
 .site .sline { display: flex; align-items: baseline; gap: 12px; margin: 0 0 6px; line-height: 16px; }
 .site .name { font-weight: bold; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.site .ico { flex: none; align-self: center; width: 16px; height: 16px; margin-right: -6px; }
+/* a site's day: a bar an hour in a sunken white box, 6px a bar, 2px
+   apart, the busiest 24px high; the hour still filling lighter, those to
+   come empty, so the box is the day's whole width all day */
+.site .today { display: flex; align-items: center; gap: 12px; margin: 0 0 8px; }
+.site .bars { flex: none; display: flex; align-items: flex-end; gap: 2px; box-sizing: content-box; height: 24px; padding: 2px; background: #fff;
+  border: 1px solid #262626; box-shadow: -1px -1px 0 #999, 1px 1px 0 #fff; }
+.site .bars i { display: block; flex: none; width: 6px; background: #666699; }
+.site .bars i.now { background: #9999cc; }
+.site .bars i.to { background: none; }
+.site .today .tv { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #555; line-height: 16px; }
 .site .st { margin-left: auto; color: #555; white-space: nowrap; }
 .add { display: flex; gap: 12px; align-items: center; margin: 0 0 8px; }
 .add .field { flex: 1; min-width: 0; }
@@ -418,9 +422,6 @@ dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 /* the link to the badge, on the page's last status line; on a phone the
    mint fills that line, and the link stays off it rather than break it */
 @media (max-width: 419px) { .badgelink { display: none; } }
-/* a site's row of buttons on a phone: Copy Snippet stays off it rather
-   than break it in two — the same button is on the site's settings */
-@media (max-width: 479px) { .site .copy { display: none; } }
 {{end}}
 
 {{define "tiers"}}<div class="window" id="tiers">

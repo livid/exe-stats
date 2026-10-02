@@ -40,6 +40,7 @@ type siteEntry struct {
 	backfilled bool    // site.Seen has been read from the site's own hits
 	refused    refusal // the last beacon refused for this site, since the server started
 	badge      siteBadge
+	icon       iconState // the site's favicon (siteicon.go)
 }
 
 func (e *siteEntry) close() {

@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	stats "github.com/livid/exe-stats"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -221,8 +222,9 @@ func TestSitesAndBeacons(t *testing.T) {
 		t.Fatalf("no holding: %s", loc)
 	}
 
-	if loc := h.form(w, "/v1/sites", url.Values{"domain": {"https://WWW.Shop.Example/tea?x=1"}, "tz": {"Asia/Tokyo"}}); loc != "/?m=added" {
-		t.Fatalf("add: %s", loc)
+	loc := h.form(w, "/v1/sites", url.Values{"domain": {"https://WWW.Shop.Example/tea?x=1"}, "tz": {"Asia/Tokyo"}})
+	if shop := h.siteID(w, "shop.example"); loc != "/sites/"+shop+"/settings" {
+		t.Fatalf("add: %s, want the new site's settings", loc)
 	}
 	if loc := h.form(w, "/v1/sites", url.Values{"domain": {"shop.example"}}); loc != "/?e=exists" {
 		t.Fatalf("twice: %s", loc)
@@ -235,9 +237,12 @@ func TestSitesAndBeacons(t *testing.T) {
 		t.Fatalf("a third site on the base tier: %s", loc)
 	}
 	shop := h.siteID(w, "shop.example")
-	home := h.do(w, "GET", "/", "", nil).Body.String()
-	if !strings.Contains(home, `&lt;script defer data-site=&#34;`+shop+`&#34; src=&#34;https://stats.example/js/s.js&#34;&gt;&lt;/script&gt;`) {
-		t.Fatal("the page does not carry the snippet")
+	snippet := `&lt;script defer data-site=&#34;` + shop + `&#34; src=&#34;https://stats.example/js/s.js&#34;&gt;&lt;/script&gt;`
+	if !strings.Contains(h.do(w, "GET", "/sites/"+shop+"/settings", "", nil).Body.String(), snippet) {
+		t.Fatal("the settings do not carry the snippet")
+	}
+	if home := h.do(w, "GET", "/", "", nil).Body.String(); strings.Contains(home, "data-site=") || strings.Count(home, `<span class="bars"`) != 2 {
+		t.Fatal("the Sites window carries a snippet, or not a day's bars a site")
 	}
 
 	for _, c := range []struct{ name, site, page, origin, want string }{
@@ -742,5 +747,44 @@ func TestTierAddedApplies(t *testing.T) {
 		if again, _ := h.app.store.account(c.addr, now); again.Tier != c.want {
 			t.Fatalf("%s: the store has tier %d", c.addr, again.Tier)
 		}
+	}
+}
+
+// In a zone off by half an hour, the views of an hour's last half stand
+// in the next bar: that bar is the one still filling, never one to come
+// hiding views the day's total counts.
+func TestTodayHalfHour(t *testing.T) {
+	kolkata, err := time.LoadLocation("Asia/Kolkata")
+	if err != nil {
+		t.Skip(err)
+	}
+	db, err := openDB(filepath.Join(t.TempDir(), "s.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	st, err := stats.New(db, stats.Options{Location: kolkata, Log: t.Logf})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 10, 2, 10, 45, 0, 0, kolkata)
+	if err := st.DB().Add([]stats.Hit{{TS: now.Add(-5 * time.Minute).UnixMilli(), VID: "v", SID: "s", Entry: true, Path: "/", Kind: "page"}}); err != nil {
+		t.Fatal(err)
+	}
+	row := siteRow{st: st}
+	if err := row.today(now); err != nil {
+		t.Fatal(err)
+	}
+	shown := 0
+	for _, b := range row.Bars {
+		if b.Class != "to" && b.H > 0 {
+			shown++
+		}
+		if b.Class == "to" && b.H > 0 {
+			t.Fatalf("a bar to come holds views: %+v", row.Bars)
+		}
+	}
+	if shown != 1 || row.Today != "1 view today" {
+		t.Fatalf("%d bars hold the view, %q", shown, row.Today)
 	}
 }
