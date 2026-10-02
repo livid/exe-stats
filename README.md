@@ -217,7 +217,8 @@ in the settings' Visibility pop-up (`sites.public`). Private, the desk
 and its JSON (`/sites/{id}`, `/v1/sites/{id}/stats`) answer the owner
 and the admins alone; Public, they answer anyone with the address,
 signed in or not, and the settings hand that address out with a Copy
-Address button. Nothing else opens with it — the settings, the setup
+Address button; the site's badge then links there instead of to the
+server's home page. Nothing else opens with it — the settings, the setup
 check, the site's icon and the home page's live numbers stay the
 owner's — and `robots.txt` still asks crawlers to keep out of
 `/sites/`. Private again, the desk closes again.
@@ -301,7 +302,8 @@ Cloudflare Cache Rule ("exe-stats site badges") bypasses the edge for
 `/badge/*.gif` and passes that header through; without it the zone's
 Browser Cache TTL stretches any badge's max-age to four hours. While the style is None it is not found,
 and that answer is not kept. The settings show it at its own size and
-enlarged, with the HTML and the Markdown that put it on a page.
+enlarged, with the HTML and the Markdown that put it on a page, linking
+to the server's home page, or to the site's desk while it is public.
 
 **Checking it.** `go test ./...` covers the rules, the sign-in and the
 collect address. `cmd/exe-stats/e2e/e2e.js` drives the whole flow in

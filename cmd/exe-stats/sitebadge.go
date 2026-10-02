@@ -191,12 +191,16 @@ func badgeRows(on int) []styleRow {
 }
 
 // badgeLinks are the HTML and the Markdown that put a site's badge on a
-// page, linking here.
+// page, linking here: to the site's desk while it is public, else home.
 func (a *App) badgeLinks(r *http.Request, s Site) (src, html, md, alt string) {
 	o := a.originOf(r)
+	href := o + "/"
+	if s.Public {
+		href = o + "/sites/" + s.ID
+	}
 	src = o + "/badge/" + s.ID + ".gif"
 	alt = s.Domain + " page views, counted by exe-stats"
-	html = `<a href="` + o + `/"><img src="` + src + `" width="88" height="31" alt="` + alt + `"></a>`
-	md = `[![` + alt + `](` + src + `)](` + o + `/)`
+	html = `<a href="` + href + `"><img src="` + src + `" width="88" height="31" alt="` + alt + `"></a>`
+	md = `[![` + alt + `](` + src + `)](` + href + `)`
 	return
 }

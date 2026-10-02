@@ -10,7 +10,8 @@ import (
 // TestVisibility: a new site's desk is private — its owner's, and an
 // admin's — until the owner makes it public in its settings; then anyone
 // reads the desk and its JSON, signed in or not, while its settings and
-// buttons stay the owner's. Private again, it closes again.
+// buttons stay the owner's, and the badge's HTML and Markdown link to
+// the desk instead of home. Private again, it closes again.
 func TestVisibility(t *testing.T) {
 	h := newHarness(t)
 	w := newWallet()
@@ -21,6 +22,15 @@ func TestVisibility(t *testing.T) {
 	desk, json, settings := "/sites/"+id, "/v1/sites/"+id+"/stats", "/sites/"+id+"/settings"
 	stranger := newWallet()
 	h.signIn(stranger)
+	h.form(w, "/v1/sites/"+id+"/badge", url.Values{"style": {"1"}})
+	src := "https://stats.example/badge/" + id + ".gif"
+	alt := "shop.example page views, counted by exe-stats"
+	badgeLinks := func(href string) []string {
+		return []string{
+			`id="badge-html" readonly value="&lt;a href=&#34;` + href + `&#34;&gt;&lt;img src=&#34;` + src + `&#34; width=&#34;88&#34; height=&#34;31&#34; alt=&#34;` + alt + `&#34;&gt;&lt;/a&gt;"`,
+			`id="badge-md" readonly value="[![` + alt + `](` + src + `)](` + href + `)"`,
+		}
+	}
 
 	closed := func(why string) {
 		t.Helper()
@@ -41,6 +51,11 @@ func TestVisibility(t *testing.T) {
 	if !strings.Contains(page, `<option value="private" selected>Private</option><option value="public">Public</option>`) ||
 		strings.Contains(page, `id="desk-link"`) {
 		t.Fatal("a new site's settings do not say its desk is private")
+	}
+	for _, want := range badgeLinks("https://stats.example/") {
+		if !strings.Contains(page, want) {
+			t.Errorf("a private site's badge does not link home: %s", want)
+		}
 	}
 
 	// only the owner, from this site's own page, with a choice there is
@@ -67,6 +82,8 @@ func TestVisibility(t *testing.T) {
 		`id="desk-link" readonly value="https://stats.example/sites/` + id + `"`,
 		`id="visibility-said" role="status">The desk is public: anyone with its address can read it.</p>`,
 		`id="badge-said" role="status"></p>`,
+		badgeLinks("https://stats.example/sites/" + id)[0],
+		badgeLinks("https://stats.example/sites/" + id)[1],
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the settings do not carry %s", want)
@@ -99,5 +116,10 @@ func TestVisibility(t *testing.T) {
 	if page = h.do(w, "GET", settings+"?m=private", "", nil).Body.String(); strings.Contains(page, `id="desk-link"`) ||
 		!strings.Contains(page, `id="visibility-said" role="status">The desk is private: only you can read it.</p>`) {
 		t.Fatal("the settings still hand out a private desk's address")
+	}
+	for _, want := range badgeLinks("https://stats.example/") {
+		if !strings.Contains(page, want) {
+			t.Errorf("a private site's badge does not link home again: %s", want)
+		}
 	}
 }
