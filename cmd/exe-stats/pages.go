@@ -100,7 +100,7 @@ type siteRow struct {
 	Views      int    // today's, on the badge's wheels
 	ViewsLine  string // and in words
 	Wheels     int    // how many: five, or as many as its digits
-	CounterW   int    // the wheels' canvas with its lamp, px
+	Cells      int    // the wheels' canvas with its lamp, in the hero's cells (counterCells)
 	Online     string
 	Trouble    string // what keeps it from counting, or is wrong with how it counts (trouble)
 	st         *stats.Stats
@@ -135,14 +135,15 @@ func (row *siteRow) today(now time.Time) error {
 	row.Bars, row.Today, row.Views, row.Online = v.Bars, v.Today, v.Views, commas(int64(v.Online))
 	row.ViewsLine = viewWords(v.Views) + " today"
 	row.Wheels = max(5, len(strconv.Itoa(v.Views)))
-	row.CounterW = counterW(row.Wheels)
+	row.Cells = counterCells(row.Wheels)
 	return nil
 }
 
-// counterW is the width of a row's counter, the welcome's hero's on its
-// 2px cells: the sunk case of n wheels, 8 cells a wheel, then the lamp
-// with its ring, 4 cells on (pages.html, pix.counter and pix.lamp).
-func counterW(n int) int { return (n*8 + 12) * 2 }
+// counterCells is the width of a row's counter in the hero's cells: the
+// sunk case of n wheels, 8 cells a wheel, then the lamp with its ring, 4
+// cells on (pages.html, pix.counter and pix.lamp). A cell is 2px, and
+// 1px on a phone; the page's rules size the canvas from this.
+func counterCells(n int) int { return n*8 + 12 }
 
 // dayLine is the words beside a site's day: its views and who is on it
 // now (a page in the last five minutes, as the desk's Live has it).
@@ -410,7 +411,7 @@ func (a *App) fill(d *homeData, ac *acct, r *http.Request, now time.Time) {
 	}
 	for i, s := range ac.sites {
 		row := siteRow{ID: s.ID, Domain: s.Domain, Counting: i < slots, // and until its day is read, an empty one
-			ViewsLine: "0 views today", Wheels: 5, CounterW: counterW(5), Online: "0"}
+			ViewsLine: "0 views today", Wheels: 5, Cells: counterCells(5), Online: "0"}
 		row.Trouble = a.trouble(ac, i, a.sites[s.ID], now)
 		if e := a.sites[s.ID]; e != nil {
 			row.Icon, row.Stamp = a.iconOf(e, now)

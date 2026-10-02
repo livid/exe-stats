@@ -437,11 +437,12 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     // ---- the account at every scale and on a phone ----
     const cookies = await rich.ctx.cookies();
     ok(cookies.length === 1 && cookies[0].httpOnly && cookies[0].sameSite === 'Lax', 'the session is one HttpOnly, SameSite=Lax cookie');
-    for (const v of [{ dpr: 1 }, { dpr: 1.25 }, { dpr: 1.5 }, { dpr: 2 }, { dpr: 3, phone: true, viewport: { width: 390, height: 844 } }]) {
+    for (const v of [{ dpr: 1 }, { dpr: 1.25 }, { dpr: 1.5 }, { dpr: 2 }, { dpr: 3, phone: true, viewport: { width: 390, height: 844 } },
+      { dpr: 2, phone: true, viewport: { width: 320, height: 640 }, tag: 'phone320' }]) {
       const c = await context(browser, ['Rich'], v);
       await c.ctx.addCookies(cookies);
       await c.page.goto(APP + '/');
-      const tag = v.phone ? 'phone' : 'dpr' + v.dpr;
+      const tag = v.tag || (v.phone ? 'phone' : 'dpr' + v.dpr);
       ok(await c.page.locator('#account').count() === 1 && await noScroll(c.page), `${tag}: the account page does not scroll sideways`);
       const b = await box(c.page, '#account .buttons .btn');
       ok(Math.round(b.height) === 20, `${tag}: account buttons are 20px high`, b);
@@ -449,9 +450,18 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
       ok(tops.length === 2 && tops.every(t => t === tops[0]), `${tag}: a site's buttons are one row`, tops);
       const bars = await c.page.evaluate(() => [...document.querySelectorAll('.site .bars i')].map(x => x.getBoundingClientRect().width));
       ok(bars.length > 0 && bars.every(w => w === bars[0]) && bars[0] >= 6 && bars[0] % 2 === 0, `${tag}: a site's bars are one width, in whole 2px steps`, bars.slice(0, 3));
-      const words = await c.page.evaluate(() => { const l = document.querySelector('.site .sline').getBoundingClientRect(), t = document.querySelector('.site .tv').getBoundingClientRect(); return [t.left >= l.left - 0.5 && t.right <= l.right + 0.5, Math.round(l.height)]; });
-      ok(words[0] && words[1] === (v.phone ? 48 : 28), `${tag}: the online count and the wheels fit the row's line (under the name on a phone)`, words);
+      const words = await c.page.evaluate(() => {
+        const r = sel => document.querySelector(sel).getBoundingClientRect();
+        const l = r('.site .sline'), t = r('.site .tv'), n = r('.site .name'), w = r('.site .wheels'), cv = document.querySelector('.site .wheels');
+        return { fits: t.left >= l.left - 0.5 && t.right <= l.right + 0.5, line: Math.round(l.height), wh: w.height, ww: w.width,
+          dev: [cv.width, cv.height], dpr: devicePixelRatio, oneRow: Math.abs((n.top + n.bottom) / 2 - (w.top + w.bottom) / 2) <= 1 };
+      });
+      const z = v.phone ? 1 : 2; // the hero's cells: 2px, 1px on a phone
+      ok(words.fits && words.oneRow && words.line === (v.phone ? 16 : 28) && words.wh === 14 * z && words.ww === (5 * 8 + 12) * z
+        && words.dev[0] === Math.round(words.ww * words.dpr) && words.dev[1] === Math.round(words.wh * words.dpr),
+        `${tag}: the online count and the wheels share the name's line, the wheels at ${z}x in the screen's own pixels`, words);
       await shot(c.page, 'account-' + tag);
+      if (v.tag === 'phone320') { await c.ctx.close(); continue; } // the narrowest phone: the Sites window is what it is here for
       await c.page.goto(`${APP}/sites/${siteId}/settings`);
       ok(await c.page.locator('#setup.ok').count() === 1 && await noScroll(c.page), `${tag}: the settings show the green check and do not scroll sideways`);
       const heights = await c.page.locator('#settings .btn:not(.tbox)').evaluateAll(bs => bs.map(x => Math.round(x.getBoundingClientRect().height)));

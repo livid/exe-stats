@@ -41,7 +41,7 @@
   <div class="frame">
     <div class="body">
       {{range .Sites}}<div class="site" id="s-{{.ID}}">
-        <div class="sline">{{if .Icon}}<img class="ico" src="/sites/{{.ID}}/icon?v={{.Stamp}}" width="16" height="16" alt="">{{end}}<a class="name" href="/sites/{{.ID}}">{{.Domain}}</a><span class="tv"><span class="on" title="Online: who opened a page in the last five minutes"><svg class="users" viewBox="0 0 16 12" width="16" height="12" aria-hidden="true"><path d="M10 0h3v1H10zM3 1h3v1H3zM9 1h5v1H9zM2 2h5v1H2zM9 2h5v1H9zM2 3h5v1H2zM9 3h5v1H9zM2 4h5v1H2zM10 4h3v1H10zM3 5h3v1H3zM9 6h5v1H9zM2 7h5v1H2zM8 7h7v1H8zM1 8h7v1H1zM9 8h7v1H9zM0 9h9v1H0zM10 9h6v1H10zM0 10h9v1H0zM10 10h6v1H10zM0 11h9v1H0zM10 11h6v1H10z"/></svg><span class="onn">{{.Online}}</span><span class="vh"> online</span></span><canvas class="wheels" width="{{.CounterW}}" height="28" style="width: {{.CounterW}}px" data-n="{{.Wheels}}" data-v="{{.Views}}" role="img" aria-label="{{.ViewsLine}}"></canvas></span></div>
+        <div class="sline">{{if .Icon}}<img class="ico" src="/sites/{{.ID}}/icon?v={{.Stamp}}" width="16" height="16" alt="">{{end}}<a class="name" href="/sites/{{.ID}}">{{.Domain}}</a><span class="tv"><span class="on" title="Online: who opened a page in the last five minutes"><svg class="users" viewBox="0 0 16 12" width="16" height="12" aria-hidden="true"><path d="M10 0h3v1H10zM3 1h3v1H3zM9 1h5v1H9zM2 2h5v1H2zM9 2h5v1H9zM2 3h5v1H2zM9 3h5v1H9zM2 4h5v1H2zM10 4h3v1H10zM3 5h3v1H3zM9 6h5v1H9zM2 7h5v1H2zM8 7h7v1H8zM1 8h7v1H1zM9 8h7v1H9zM0 9h9v1H0zM10 9h6v1H10zM0 10h9v1H0zM10 10h6v1H10zM0 11h9v1H0zM10 11h6v1H10z"/></svg><span class="onn">{{.Online}}</span><span class="vh"> online</span></span><canvas class="wheels" width="{{.Cells}}" height="14" style="--cells: {{.Cells}}" data-n="{{.Wheels}}" data-v="{{.Views}}" role="img" aria-label="{{.ViewsLine}}"></canvas></span></div>
         <a class="bars" href="/sites/{{.ID}}" style="--n: {{len .Bars}}" aria-label="The desk of {{.Domain}}. Today, a bar an hour over yesterday's: {{.Today}}">{{range .Bars}}<i{{with .Class}} class="{{.}}"{{end}} style="--t: {{.H}}px; --y: {{.Y}}px"{{with .Title}} title="{{.}}"{{end}}></i>{{end}}</a>
         <div class="buttons">
           <span class="say trouble" role="status">{{.Trouble}}</span>
@@ -161,17 +161,25 @@ const pix = (() => {
   const words = n => (n === 1 ? "1 view" : n.toLocaleString("en-US") + " views");
   const snap = v => Math.round(v / 2) * 2; // the hero's 2px cells
 
-  // each row's wheels and lamp, on a canvas of 2px cells: the case's sunk
-  // edge at the left, n wheels, and the lamp 4 cells on
+  // each row's wheels and lamp, on a canvas of the hero's cells — the
+  // case's sunk edge at the left, n wheels, and the lamp 4 cells on —
+  // as big as the page's rules make it (2px a cell, 1px on a phone), in
+  // as many device pixels; again when the window changes either
   const meters = [];
   const fit = m => {
-    const w = (m.n * 8 + 12) * 2;
-    m.cv.style.width = w + "px";
-    m.cv.width = Math.round(w * devicePixelRatio);
-    m.cv.height = Math.round(28 * devicePixelRatio);
-    m.p.sx = m.cv.width / (w / 2); m.p.sy = m.cv.height / 14;
+    const cells = m.n * 8 + 12;
+    m.cv.style.setProperty("--cells", cells);
+    const r = m.cv.getBoundingClientRect();
+    m.cv.width = Math.round(r.width * devicePixelRatio);
+    m.cv.height = Math.round(r.height * devicePixelRatio);
+    m.p.sx = m.cv.width / cells; m.p.sy = m.cv.height / 14;
     m.drawn = "";
   };
+  let refit = 0;
+  addEventListener("resize", () => {
+    cancelAnimationFrame(refit);
+    refit = requestAnimationFrame(() => { for (const m of meters) { fit(m); paint(m); } });
+  });
   const paint = m => {
     const k = Math.round(m.shown * 10) + (m.lit > 0 ? "*" : "");
     if (k === m.drawn) return; // only a frame that differs
@@ -817,11 +825,11 @@ dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .site { padding: 0 0 4px; margin: 0 0 12px; border-bottom: 1px solid #bbb; }
 /* the row's line: the site at the left; at the right who is on it now,
    by a figure of two, and today's views on the hero's wheels with its
-   lamp. On a phone the figure and the wheels take a line of their own
-   under the name, at its right: the width decides, not the numbers, so
-   a count that grows moves nothing. A site that counts and is well says
-   nothing more; one that is not, or not well, says so at the left of
-   its buttons */
+   lamp, their 2px cells 1px on a phone, so they keep to the name's line
+   there too. The name gives way, with an ellipsis: a count that grows
+   moves the wheels nothing. A site that counts and is well says nothing
+   more; one that is not, or not well, says so at the left of its
+   buttons */
 .site .sline { display: flex; align-items: center; margin: 0; line-height: 16px; }
 .site .name { font-weight: bold; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .site .ico { flex: none; width: 16px; height: 16px; margin-right: 6px; }
@@ -831,12 +839,13 @@ dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
    smoothed between 1 and 2, as the trail's chevron is */
 .site .users { display: block; flex: none; width: 16px; height: 12px; fill: #555; shape-rendering: crispEdges; }
 @media (min-resolution: 1.01dppx) and (max-resolution: 1.99dppx) { .site .users { shape-rendering: geometricPrecision; } }
-.site .wheels { display: block; flex: none; height: 28px; image-rendering: pixelated; }
+.site .wheels { display: block; flex: none; width: calc(var(--cells) * 2px); height: 28px; image-rendering: pixelated; }
 .site .trouble { color: #7a1010; }
-@media (max-width: 479px) {
-  .site .sline { flex-wrap: wrap; row-gap: 4px; }
-  .site .tv { order: 1; flex-basis: 100%; justify-content: flex-end; margin-left: 0; padding-left: 0; } /* the wheels keep their place */
-}
+/* with nothing to say it keeps no room, so the buttons stay one row on
+   the narrowest phone; on a phone what it says has a line of its own */
+.site .trouble:empty { flex-basis: 0; }
+@media (max-width: 479px) { .site .trouble:not(:empty) { flex-basis: 100%; } }
+@media (max-width: 479px) { .site .wheels { width: calc(var(--cells) * 1px); height: 14px; } }
 /* words for a screen reader alone */
 .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 /* a site's day, drawn as the welcome's hero draws one (badge.py's
