@@ -1,0 +1,233 @@
+{{/* The server's own pages, in the Platinum chrome the desk is drawn in
+     (chrome.css of the stats package): one page, / — signed out, what
+     this is and the tiers; signed in, the account and its sites. Every
+     press but the sign-in is a plain form answered with a redirect, so
+     the page is whole as it arrives and nothing moves afterwards. */}}
+{{define "home"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Stats · {{.Host}}</title>
+<meta name="description" content="Page views for your own sites: one script tag, no cookies, and a desk of numbers for each site. For {{.Token}} holders.">
+<meta name="theme-color" content="#dddddd">
+<style>{{chrome}}
+.window { max-width: 560px; }
+.body { padding: 12px 12px 0; }
+h1 { margin: 0 0 8px; font-size: 12px; line-height: 16px; }
+h1 small { display: block; font-size: 12px; font-weight: normal; }
+p { margin: 0 0 8px; line-height: 16px; }
+.fine { color: #555; }
+code { font: 11px/16px Monaco, "Courier New", monospace; }
+button.btn { font-family: inherit; cursor: default; margin: 0; }
+.btn:disabled { color: #777; border-color: #888; box-shadow: none; }
+.btn.default { outline: 2px solid #262626; outline-offset: 1px; border-radius: 4px; }
+.statusbar > :last-child:not(:first-child) { margin-left: auto; }
+.statusbar { min-height: 22px; }
+/* a row of buttons: at the lower right, 12px apart, the default last */
+.buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px 12px; margin: 12px 0; min-height: 20px; }
+.buttons form { display: contents; }
+.buttons .say { flex: 1 1 12em; min-width: 0; min-height: 16px; line-height: 16px; color: #555; }
+/* the sign-in row: its line may run to two on a phone, and holds the
+   wallets' buttons when there are several — the room is there from the
+   start, so the button never moves */
+#welcome .buttons { align-items: flex-end; }
+#welcome .say { display: flex; flex-wrap: wrap; align-items: flex-end; align-content: flex-end; gap: 6px 12px; min-height: 32px; }
+/* the tiers, and an account's facts: a sunken white list of 18px rows */
+table { width: 100%; border-collapse: collapse; margin: 0 0 12px; background: #fff; border: 1px solid #262626;
+  box-shadow: -1px -1px 0 #999, 1px 1px 0 #fff; }
+th, td { height: 18px; padding: 1px 6px; text-align: right; font-size: 12px; line-height: 16px; white-space: nowrap; }
+th { font-weight: bold; background: #ddd; border-bottom: 1px solid #262626; }
+th:first-child, td:first-child { text-align: left; }
+tr.on td { background: #333399; color: #fff; }
+dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0 0 12px; line-height: 16px; }
+dt { font-weight: bold; text-align: right; }
+dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+/* the month's views: a bar in a sunken frame, its fill a box of its own */
+.meter { display: inline-block; vertical-align: -2px; width: 120px; height: 12px; margin-right: 6px; background: #fff;
+  border: 1px solid #262626; box-shadow: -1px -1px 0 #999, 1px 1px 0 #fff; }
+.meter i { display: block; height: 10px; background: #666699; }
+.notice { padding: 6px 8px; background: #ffffcc; border: 1px solid #262626; }
+.flash { min-height: 16px; }
+.flash.fault { color: #7a1010; }
+/* a text field: white, sunken, 20px */
+.field { display: block; box-sizing: border-box; width: 100%; height: 20px; margin: 0; padding: 2px 5px; background: #fff; color: #262626;
+  border: 1px solid #262626; border-radius: 0; box-shadow: -1px -1px 0 #999, 1px 1px 0 #fff;
+  font: 12px/14px "Charcoal", "Chicago", "Geneva", "Lucida Grande", "Lucida Sans", Verdana, sans-serif; -webkit-appearance: none; appearance: none; }
+.field:focus { outline: 2px solid #9999fe; outline-offset: 0; }
+.field:disabled { background: #ddd; color: #777; }
+.field.snip { font: 11px/14px Monaco, "Courier New", monospace; }
+.site { padding: 0 0 4px; margin: 0 0 12px; border-bottom: 1px solid #bbb; }
+.site .sline { display: flex; align-items: baseline; gap: 12px; margin: 0 0 6px; line-height: 16px; }
+.site .name { font-weight: bold; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.site .st { margin-left: auto; color: #555; white-space: nowrap; }
+.add { display: flex; gap: 12px; align-items: center; margin: 0 0 8px; }
+.add .field { flex: 1; min-width: 0; }
+@media (pointer: coarse) { .field { font-size: 16px; height: 24px; } .field.snip { font-size: 16px; } }
+</style>
+</head>
+<body>
+{{if .Signed}}
+<div class="window" id="account">
+  <div class="titlebar"><span class="stripe"></span><span class="title">Account</span><span class="stripe"></span></div>
+  <div class="frame">
+    <div class="body">
+      <dl>
+        <dt>Wallet</dt><dd><code title="{{.Addr}}">{{.AddrShort}}</code></dd>
+        <dt>Holding</dt><dd>{{.Holding}}</dd>
+        <dt>Tier</dt><dd><b>{{.TierName}}</b> · {{.TierLine}}</dd>
+        <dt>This month</dt><dd>{{if .NoTier}}{{.Used}} views{{else}}<span class="meter"><i style="width: {{.Pct}}%"></i></span>{{.Used}} of {{.Cap}} views{{end}}</dd>
+      </dl>
+      {{range .Lines}}<p class="notice">{{.}}</p>{{end}}
+      <p class="flash{{if .Fault}} fault{{end}}" role="status">{{if .Fault}}{{.Fault}}{{else}}{{.Note}}{{end}}</p>
+      <div class="buttons">
+        <form method="post" action="/v1/signout"><button class="btn">Sign Out</button></form>
+        <form method="post" action="/v1/check"><button class="btn">Check Now</button></form>
+      </div>
+    </div>
+    <div class="statusbar"><span>{{.Checked}}</span></div>
+  </div>
+</div>
+<div class="window" id="sites">
+  <div class="titlebar"><span class="stripe"></span><span class="title">Sites</span><span class="stripe"></span></div>
+  <div class="frame">
+    <div class="body">
+      {{range .Sites}}<div class="site" id="s-{{.ID}}">
+        <div class="sline"><a class="name" href="/sites/{{.ID}}">{{.Domain}}</a><span class="st">{{if .Counting}}Counting{{else}}Resting{{end}}</span></div>
+        <input class="field snip" readonly value="{{.Snippet}}" aria-label="The snippet for {{.Domain}}">
+        {{if .Removing}}<div class="buttons">
+          <span class="say">Remove {{.Domain}} and its numbers? This cannot be undone.</span>
+          <a class="btn" href="/#s-{{.ID}}">Cancel</a>
+          <form method="post" action="/v1/sites/{{.ID}}/remove"><button class="btn">Remove</button></form>
+        </div>{{else}}<div class="buttons">
+          <a class="btn" href="/?remove={{.ID}}#s-{{.ID}}">Remove…</a>
+          <button class="btn copy" type="button">Copy Snippet</button>
+          {{if not .Counting}}<form method="post" action="/v1/sites/{{.ID}}/pick"><button class="btn">Count This One</button></form>{{end}}
+          <a class="btn" href="/sites/{{.ID}}">Open</a>
+        </div>{{end}}
+      </div>{{else}}<p>No sites yet. Add one, paste its snippet into the head of its pages, and its desk fills as readers come.</p>{{end}}
+      <form class="add" method="post" action="/v1/sites">
+        <input type="hidden" name="tz" id="tz" value="UTC">
+        <input class="field" name="domain" placeholder="example.com" aria-label="A site's domain" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="253"{{if not .CanAdd}} disabled{{end}}>
+        <button class="btn"{{if not .CanAdd}} disabled{{end}}>Add Site</button>
+      </form>
+      <p class="fine flash">{{.AddWhy}}</p>
+    </div>
+    <div class="statusbar"><span>{{.SitesLine}}</span><span>A site's days begin in your time zone</span></div>
+  </div>
+</div>
+{{template "tiers" .}}
+{{else}}
+<div class="window" id="welcome">
+  <div class="titlebar"><span class="stripe"></span><span class="title">Stats</span><span class="stripe"></span></div>
+  <div class="frame">
+    <div class="body">
+      <h1>Page views for your own sites<small>One script tag, no cookies, and a desk of numbers for each site.</small></h1>
+      <p>Visitors, page views, sources, countries and devices, counted as the hub and exe count their own readers. A visitor is a hash that changes every midnight: no address is stored, and nothing is kept in anyone's browser.</p>
+      <p>It is for {{.Token}} holders. How much a wallet holds decides how many sites it may add and how many views a month are counted. Holding is read from the chain: the wallet signs one message to sign in, and never a transaction.</p>
+      <div class="buttons"><span class="say" id="say" role="status"></span><button class="btn default" id="signin" type="button">Sign in with Solana</button></div>
+    </div>
+    <div class="statusbar"><span>Nothing here costs anything: tokens are held, not spent</span></div>
+  </div>
+</div>
+{{template "tiers" .}}
+{{end}}
+<script>
+(() => {
+  // a site's days begin where its owner is
+  const tz = document.getElementById("tz");
+  if (tz) try { tz.value = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"; } catch (e) {}
+  for (const f of document.querySelectorAll(".snip")) f.addEventListener("focus", () => f.select());
+  for (const b of document.querySelectorAll(".copy")) b.addEventListener("click", () => {
+    const f = b.closest(".site").querySelector(".snip");
+    f.select();
+    if (navigator.clipboard) navigator.clipboard.writeText(f.value).catch(() => {});
+  });
+
+  const btn = document.getElementById("signin"), say = document.getElementById("say");
+  if (!btn) return;
+  // ---- wallets: the Wallet Standard's two-way handshake, as the hub's pages do it ----
+  const wallets = [];
+  const registry = { register(...ws) {
+    for (const w of ws) if (w && w.features && w.features["standard:connect"] && w.features["solana:signMessage"] && !wallets.includes(w)) wallets.push(w);
+    return () => {};
+  } };
+  addEventListener("wallet-standard:register-wallet", e => { try { e.detail(registry); } catch (err) {} });
+  dispatchEvent(new CustomEvent("wallet-standard:app-ready", { detail: registry }));
+  const legacy = () => {
+    const p = window.solana;
+    return p && typeof p.connect === "function" && typeof p.signMessage === "function"
+      ? { name: p.isPhantom ? "Phantom" : "Solana wallet", legacy: p } : null;
+  };
+  // wallets announce themselves as the page starts; give them a moment
+  const found = new Promise(res => setTimeout(res, 300)).then(() => wallets.length ? wallets : [legacy()].filter(Boolean));
+  const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+  const solanaAccount = accounts => (accounts || []).find(a => (a.chains || []).some(c => c.startsWith("solana:"))) || (accounts || [])[0];
+  async function connect(w) {
+    if (w.legacy) {
+      const p = w.legacy, r = await p.connect();
+      const pk = (r && r.publicKey) || p.publicKey;
+      if (!pk) throw new Error("The wallet named no account.");
+      return { address: pk.toBase58(), sign: async m => { const r = await p.signMessage(m, "utf8"); return new Uint8Array(r.signature || r); } };
+    }
+    const { accounts } = await w.features["standard:connect"].connect();
+    const a = solanaAccount(accounts);
+    if (!a) throw new Error("The wallet named no account.");
+    return { address: a.address, sign: async m => {
+      const [out] = await w.features["solana:signMessage"].signMessage({ account: a, message: m });
+      if (out.signedMessage && !same(out.signedMessage, m)) throw new Error("The wallet signed another message.");
+      return new Uint8Array(out.signature);
+    } };
+  }
+  let busy = false;
+  async function signIn(w) {
+    if (busy) return;
+    busy = true;
+    say.textContent = "Waiting for the wallet…";
+    try {
+      const me = await connect(w);
+      const c = await (await fetch("/v1/challenge?address=" + encodeURIComponent(me.address), { cache: "no-store" })).json();
+      if (!c.message) throw new Error(c.error || "No challenge came back.");
+      const sig = await me.sign(new TextEncoder().encode(c.message));
+      const r = await fetch("/v1/signin", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address: me.address, message: c.message, signature: btoa(String.fromCharCode(...sig)) }) });
+      const out = await r.json();
+      if (!r.ok) throw new Error(out.error || "The sign-in was refused.");
+      location.reload();
+    } catch (e) {
+      const m = e && e.message ? String(e.message) : "";
+      say.textContent = m && m.length <= 60 ? m.charAt(0).toUpperCase() + m.slice(1) : "The wallet did not sign.";
+    } finally { busy = false; }
+  }
+  btn.addEventListener("click", async () => {
+    const ws = await found;
+    if (!ws.length) { say.textContent = "No Solana wallet in this browser."; return; }
+    if (ws.length === 1) return signIn(ws[0]);
+    // several wallets: the choice is the reader's, in the room the line had
+    say.textContent = "";
+    for (const w of ws) {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "btn"; b.textContent = w.name;
+      b.addEventListener("click", () => signIn(w));
+      say.appendChild(b);
+    }
+  });
+})();
+</script>
+</body>
+</html>{{end}}
+
+{{define "tiers"}}<div class="window" id="tiers">
+  <div class="titlebar"><span class="stripe"></span><span class="title">Tiers</span><span class="stripe"></span></div>
+  <div class="frame">
+    <div class="body">
+      <table>
+        <tr><th>Tier</th><th>Hold</th><th>Sites</th><th>Views a month</th></tr>
+        {{range .Tiers}}<tr{{if .On}} class="on"{{end}}><td>{{.Name}}</td><td>{{.Hold}} {{$.Token}}</td><td>{{.Sites}}</td><td>{{.Views}}</td></tr>
+        {{end}}
+      </table>
+      <p class="fine">A balance that falls under its tier keeps counting for {{.GraceDays}} days. A first month over the cap is counted up to {{.OverFactor}} times the cap. Nothing counted is deleted for either.</p>
+    </div>
+    <div class="statusbar"><span>Mint <code>{{.Mint}}</code></span></div>
+  </div>
+</div>{{end}}

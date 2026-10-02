@@ -1,0 +1,17 @@
+{
+  "listen": "127.0.0.1:7795",
+  "data": "/home/you/.exe-stats",
+  "origin": "https://stats.example.com",
+  "rpc_url": "https://api.mainnet-beta.solana.com",
+  "mint": "9raUVuzeWUk53co63M4WXLWPWE4Xc6Lpn7RS9dnkpump",
+  "decimals": 6,
+  "token": "$V2EX",
+  "tiers": [
+    { "name": "Base", "hold": 10000, "sites": 2, "views": 10000 },
+    { "name": "Middle", "hold": 50000, "sites": 5, "views": 100000 },
+    { "name": "Top", "hold": 100000, "sites": 10, "views": 500000 }
+  ],
+  "grace_days": 7,
+  "grace_every_days": 30,
+  "over_factor": 2
+}

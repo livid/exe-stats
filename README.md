@@ -100,3 +100,76 @@ Country, region and city come from the proxy's headers when there is one
 an hour the chart's first bucket may take an hour that began just before
 it; the totals are exact either way. `Sweep` drops hits older than a time — a retention policy is
 the host's to run, and there is none by default.
+
+## The server
+
+`cmd/exe-stats` is the package as a service for other people's sites,
+the way plausible.io is one: sign in with a Solana wallet, add a site,
+paste one script tag, and read that site on a desk of its own.
+
+```sh
+go build -o exe-stats ./cmd/exe-stats
+./exe-stats -config config.json     # cmd/exe-stats/config.example.json
+```
+
+Every field of the config has a default, so no config at all runs a
+server on `127.0.0.1:7795` over `./data`. It keeps `app.db` (accounts,
+sessions, sites, the month's counts) and `sites/<id>.db`, one SQLite
+file a site — each is the database this package is handed, so a site's
+numbers can be copied or deleted as one file. `origin` is the public
+address: the snippet names it, the sign-in message names its host, the
+cookie is `Secure` when it is https, and a request that changes
+something must come from it. `rpc_url` may carry an API key and is never
+logged or shown.
+
+**The snippet** is one line in a page's head:
+
+```html
+<script defer data-site="0123456789ab" src="https://stats.example.com/js/s.js"></script>
+```
+
+The script sends one beacon a page view — the page's address and where
+the reader came from — and again when a page changes its own address
+(`pushState`); a hash change is not a view. It sets no cookie and stores
+nothing. The collect address, `POST /e`, counts a beacon only for the
+site's own domain (or its `www.`), sent from that origin, and answers
+the same 202 whatever became of it; the `X-Exe-Stats` response header
+says what did (`counted`, `not this site's page`, `month full`, …), for
+an owner checking a snippet in the browser's network panel.
+
+**Signing in** is one signature over a message the server issued for
+that address, never a transaction; the address is the account. A session
+is an `HttpOnly`, `SameSite=Lax` cookie whose hash, not its value, is
+stored.
+
+**Tiers** follow what the wallet holds of `mint`, read over RPC
+(`getTokenAccountsByOwner`): how many sites count, and how many page
+views a calendar month (UTC) over all of them. The numbers are the
+config's `tiers`.
+
+**Grace.** An account is checked once a day at the hour it first
+arrived, and by its Check Now button. A check the RPC did not answer
+changes nothing.
+
+| State | Starts when | Counting | Ends when |
+|---|---|---|---|
+| Good | the balance covers the tier, views under the cap | everything | |
+| Short | a check finds the balance under the tier | everything, for `grace_days`; no new sites | the balance back at any check; or the grace runs out |
+| Lower tier | the grace ran out, the balance covers a lower tier | the sites that tier holds: the ones the owner picked, else the oldest | the balance back |
+| Paused | the grace ran out, the balance covers no tier | nothing; the desks stay readable | the balance back |
+| Over | views pass the cap in a month | everything, up to `over_factor` caps | the month turns |
+| Capped | the month after a full one | stops at the cap | a month under the cap, or a higher tier |
+
+There is one grace in `grace_every_days`: a second drop inside that
+window takes effect at the check that sees it. Nothing counted is
+deleted in any state; only the owner's Remove deletes a site.
+
+**Checking it.** `go test ./...` covers the rules, the sign-in and the
+collect address. `cmd/exe-stats/e2e/e2e.js` drives the whole flow in
+headless Chromium against a scratch server — a mock wallet signing with
+a real key, a fake RPC, and a site carrying the snippet; its head says
+how to run it.
+
+Not built yet: a public link to a desk, more than one wallet on an
+account, a note by email or push when a grace begins, export, and
+closing the files of sites nobody has read for a while.
