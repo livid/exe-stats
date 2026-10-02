@@ -285,6 +285,11 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     ok(/^The HTML is (on your clipboard|selected for you to copy)\.$/.test(copied), 'Copy HTML says what it did', copied);
     ok(bp.errors.length === 0, 'no script errors with the badge', bp.errors);
     await shot(bp, 'badge-on-dpr1');
+    await Promise.all([bp.waitForNavigation(), bp.click('.crumbs a:has-text("shop.example")')]);
+    ok(new URL(bp.url()).pathname === `/sites/${siteId}`, "the trail's site leads to its desk (at the range last pressed)", bp.url());
+    await bp.goBack();
+    await Promise.all([bp.waitForNavigation(), bp.click('.crumbs a:has-text("Sites")')]);
+    ok(bp.url() === `${APP}/`, 'and Sites leads home', bp.url());
     await bp.close();
 
     // ---- the account at every scale and on a phone ----
@@ -305,6 +310,16 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
       ok(await c.page.locator('#setup.ok').count() === 1 && await noScroll(c.page), `${tag}: the settings show the green check and do not scroll sideways`);
       const heights = await c.page.locator('#settings .btn:not(.tbox)').evaluateAll(bs => bs.map(x => Math.round(x.getBoundingClientRect().height)));
       ok(heights.length === 6 && heights.every(h => h === 20), `${tag}: settings buttons are 20px high`, heights);
+      // the trail, in the exe documentation's toolbar: 33px, the trail 8px
+      // down it, and on a phone the steps nearest this page only
+      const trail = await c.page.evaluate(() => {
+        const s = document.querySelector('.strip.tools'), n = s.querySelector('.crumbs'), r = s.getBoundingClientRect();
+        return { h: r.height, top: n.getBoundingClientRect().top - r.top,
+          shown: [...n.querySelectorAll('.crumb, b')].filter(x => x.offsetParent).map(x => x.textContent),
+          links: [...n.querySelectorAll('a')].map(a => a.getAttribute('href')) };
+      });
+      ok(Math.round(trail.h) === 33 && Math.abs(trail.top - 8) < 0.5 && trail.links.join() === `/,/sites/${siteId}` &&
+        trail.shown.join(' > ') === (v.phone ? 'shop.example > Settings' : 'Sites > shop.example > Settings'), `${tag}: the trail is the docs' toolbar`, trail);
       // the enlarged badge stands on whole screen pixels, the same number
       // for each of its own
       await c.page.waitForFunction(() => document.querySelector('.badges .big').complete);

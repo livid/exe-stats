@@ -175,7 +175,9 @@
      under it and a field to add one; each press is a form answered with
      the page again. Badge: a pop-up of styles, None until the owner
      chooses one, and while one is on the site's badge as it stands, with
-     the HTML and the Markdown that show it. */}}
+     the HTML and the Markdown that show it. Above them, the exe
+     documentation's toolbar with the trail: Sites, the site's desk, and
+     this page. */}}
 {{define "settings"}}<!doctype html>
 <html lang="en">
 <head>
@@ -210,6 +212,38 @@ section + section { margin-top: 12px; padding-top: 12px; border-top: 1px solid #
 .list .row:has(input:checked) { background: #333399; color: #fff; }
 .list .row:has(input:checked) .note { color: #fff; }
 @media (pointer: coarse) { .list .row { height: 24px; } }
+/* the toolbar and its trail, the exe documentation's
+   (internal/server/site/site.css), copied: its own row at the top of the
+   frame, on the platinum of the status bar, and the trail at its left.
+   It holds no buttons here, so it keeps the height theirs give it there. */
+.strip.tools { display: flex; align-items: center; gap: 8px; padding: 6px 12px; min-height: 33px;
+  background: #ddd; color: #333; font-size: 11px;
+  box-shadow: inset 1px 1px 0 rgba(255,255,255,.6), inset -1px -1px 0 #aaa; }
+.strip.tools { border-bottom: 1px solid #262626; }
+/* the trail: where this page sits, in one line */
+.tools .crumbs { display: flex; align-items: baseline; gap: 5px; min-width: 0;
+  font-size: 11px; white-space: nowrap; overflow: hidden; }
+.tools .crumbs .crumb { display: inline-flex; align-items: baseline; gap: 5px; flex: none; }
+.tools .crumbs a { color: #333399; text-decoration: none; }
+.tools .crumbs a:hover { text-decoration: underline; }
+/* the step between two names is a chevron, drawn as the desktop draws a
+   glyph: pixels on a grid, crisp at whole ratios; between 1 and 2 a
+   fractional scale would drop a row of the diagonal, so it is smoothed
+   there instead */
+.tools .crumbs .sep { display: block; flex: none; align-self: center; margin: 0 1px;
+  width: 4px; height: 7px; color: #777; shape-rendering: crispEdges; }
+.tools .crumbs .sep .k { fill: currentColor; }
+@media (min-resolution: 1.01dppx) and (max-resolution: 1.99dppx) {
+  .tools .crumbs .sep { shape-rendering: geometricPrecision; }
+}
+/* this page's own name is the last thing to give way: it shortens with
+   an ellipsis, and where even that is too narrow the steps above it go
+   before it does, nearest first */
+.tools .crumbs b { flex: 0 1 auto; min-width: 3em; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 480px) { .tools .crumbs .crumb:not(:last-of-type) { display: none; } }
+/* narrower than any phone: the page's own name alone, and the window's
+   title bar says the same thing above it */
+@media (max-width: 359px) { .tools .crumbs .crumb { display: none; } }
 /* the badge's style: a pop-up after its label, as a control panel has it */
 .style { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; }
 .style .popup { width: 140px; }
@@ -219,6 +253,9 @@ section + section { margin-top: 12px; padding-top: 12px; border-top: 1px solid #
 <div class="window" id="settings">
   <div class="titlebar"><a class="tbox" href="/" title="Sites" aria-label="Sites"></a><span class="stripe"></span><span class="title">{{.Domain}} Settings</span><span class="stripe"></span></div>
   <div class="frame">
+    <div class="strip tools">
+      <nav class="crumbs" aria-label="Breadcrumb"><span class="crumb"><a href="/">Sites</a><svg class="sep" viewBox="0 0 4 7" width="4" height="7" aria-hidden="true"><path class="k" d="M0 0h1v1H0zM1 1h1v1H1zM2 2h1v1H2zM3 3h1v1H3zM2 4h1v1H2zM1 5h1v1H1zM0 6h1v1H0z"/></svg></span><span class="crumb"><a href="/sites/{{.ID}}">{{.Domain}}</a><svg class="sep" viewBox="0 0 4 7" width="4" height="7" aria-hidden="true"><path class="k" d="M0 0h1v1H0zM1 1h1v1H1zM2 2h1v1H2zM3 3h1v1H3zM2 4h1v1H2zM1 5h1v1H1zM0 6h1v1H0z"/></svg></span><b>Settings</b></nav>
+    </div>
     <div class="body">
       <section id="setup-section">
       <h2>Setup</h2>

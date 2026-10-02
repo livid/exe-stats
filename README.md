@@ -139,7 +139,8 @@ became of it; the `X-Exe-Stats` response header says what did
 checking a snippet in the browser's network panel.
 
 **A site's settings** (`/sites/{id}/settings`, its Settings… button)
-begin with the setup check: a check mark that turns green once the
+open under a toolbar with a trail, Sites › the site › Settings, the one
+the exe documentation has, and begin with the setup check: a check mark that turns green once the
 snippet reports a view from the site's own pages — counted or not, since
 a resting site's snippet is in place too. Until then its line says the
 page waits, or why a view was refused (a page on another host, or a
