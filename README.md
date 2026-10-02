@@ -193,6 +193,25 @@ out the HTML and the Markdown that link it, naming the server by its
 `python3 cmd/exe-stats/badge.py sheet.png` redraws `badge.gif` and
 writes every frame at 4× to look at.
 
+**A site's own badge.** The last section of a site's settings is a
+pop-up of badge styles, None until the owner picks one, since anyone can
+read a badge and a site's numbers are its owner's to show. The first
+style, Hit Counter, is the same drawing with the site's numbers: its
+wheels hold every page view since the site was added (crawlers aside),
+past 99,999 in thousands with a K on the last wheel, and its twelve bars
+are today's in two-hour steps from midnight where the site's days begin,
+scaled to the busiest two hours of today and yesterday. Its first frame
+is the badge as it stands, held four seconds; then midnight slides the
+day off, the wheels turn back to the count it began on, and the day
+fills again two hours a beat until they slow onto the count. A day with
+no views yet stands still. It is served at `/badge/{id}.gif`, drawn by
+`counter.go` (badge.py's face, glyphs and palette, checked against
+`badge.gif`'s first frame pixel for pixel) at most once a minute, each
+frame after the first only the box that changed, a few KB; browsers and
+the edge keep it five minutes. While the style is None it is not found,
+and that answer is not kept. The settings show it at its own size and
+enlarged, with the HTML and the Markdown that put it on a page.
+
 **Checking it.** `go test ./...` covers the rules, the sign-in and the
 collect address. `cmd/exe-stats/e2e/e2e.js` drives the whole flow in
 headless Chromium against a scratch server — a mock wallet signing with

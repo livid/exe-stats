@@ -10,17 +10,7 @@
 <title>Badge · {{.Host}}</title>
 <meta name="description" content="An animated 88×31 button to link to Stats with, the kind a row of which ended every page of the late-nineties web.">
 <meta name="theme-color" content="#dddddd">
-<script>
-// the enlarged badge takes a whole number of screen pixels for each of
-// its own, near three CSS pixels, so at 125 or 150 percent no column of
-// it comes out wider than the next; its size is set before the first
-// paint, rounded up to the 1/64px layout keeps, so nothing moves
-function badgeFit() {
-  const r = devicePixelRatio || 1, k = Math.max(1, Math.round(3 * r));
-  document.documentElement.style.setProperty("--bw", Math.ceil(88 * k / r * 64) / 64 + "px");
-}
-badgeFit();
-</script>
+{{template "badgefit"}}
 <style>{{chrome}}
 .window { max-width: 560px; }
 .body { padding: 12px 12px 0; }
@@ -31,15 +21,7 @@ button.btn { font-family: inherit; cursor: default; margin: 0; }
 .statusbar { min-height: 22px; }
 /* a row of buttons: at the lower right, 12px apart */
 .buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px 12px; margin: 12px 0; min-height: 20px; }
-/* the badge at its own size and enlarged: side by side, or stacked on a
-   phone; the enlarged one gives way rather than overflow a narrow one */
-.badges { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: center; gap: 12px 32px; margin: 12px 0 14px; }
-.badges figure { margin: 0; min-width: 0; }
-.badges img { display: block; margin: 0 auto 6px; image-rendering: pixelated; }
-.badges .big { width: var(--bw, 264px); max-width: 100%; height: auto; }
-.badges figcaption { text-align: center; font-size: 11px; line-height: 14px; color: #555; }
-label { display: block; margin: 0 0 4px; font-weight: bold; line-height: 16px; }
-.field + label { margin-top: 10px; }
+{{template "badgecss"}}
 /* a text field: white, sunken, 20px */
 .field { display: block; box-sizing: border-box; width: 100%; height: 20px; margin: 0; padding: 2px 5px; background: #fff; color: #262626;
   border: 1px solid #262626; border-radius: 0; box-shadow: -1px -1px 0 #999, 1px 1px 0 #fff;
@@ -60,31 +42,67 @@ label { display: block; margin: 0 0 4px; font-weight: bold; line-height: 16px; }
         <figure><img src="/badge.gif" width="88" height="31" alt="{{.Alt}}"><figcaption>Its own size</figcaption></figure>
         <figure><img class="big" src="/badge.gif" width="264" height="93" alt="{{.Alt}}, enlarged"><figcaption>Enlarged</figcaption></figure>
       </div>
+      <p>A site counted here can have one of its own, with its own numbers on the wheels: choose a style in the site's settings.</p>
       <p>Put it in a footer, a sidebar or a README. Paste one of these as it is, or <a href="/badge.gif" download="exe-stats-badge.gif">save the GIF</a> and serve it yourself.</p>
-      <label for="html">HTML</label>
-      <input class="field snip" id="html" readonly value="{{.HTML}}">
-      <label for="md">Markdown</label>
-      <input class="field snip" id="md" readonly value="{{.MD}}">
+      <div class="snips">
+        <label for="html">HTML</label>
+        <input class="field snip" id="html" readonly value="{{.HTML}}">
+        <label for="md">Markdown</label>
+        <input class="field snip" id="md" readonly value="{{.MD}}">
+      </div>
       <div class="buttons">
-        <button class="btn copy" type="button" data-for="md">Copy Markdown</button>
-        <button class="btn copy" type="button" data-for="html">Copy HTML</button>
+        <button class="btn copy" type="button" data-for="md" data-name="The Markdown">Copy Markdown</button>
+        <button class="btn copy" type="button" data-for="html" data-name="The HTML">Copy HTML</button>
       </div>
     </div>
     <div class="statusbar"><span id="said" role="status">GIF, 88 × 31, {{.Frames}} frames, {{.Size}}</span></div>
   </div>
 </div>
-<script>
-// The enlarged badge kept on the screen's own pixels; and Copy, which
-// puts a snippet on the clipboard and says so on the status line, or
-// where the clipboard is not offered leaves the snippet selected for the
-// reader's own copy.
-(() => {
+{{template "badgejs"}}
+<script>badgeKit(document.getElementById("said"));</script>
+</body>
+</html>{{end}}
+
+
+{{/* What a page that shows a badge enlarged shares: this page, and a
+     site's settings, which show the site's own. */}}
+{{define "badgefit"}}<script>
+// the enlarged badge takes a whole number of screen pixels for each of
+// its own, near three CSS pixels, so at 125 or 150 percent no column of
+// it comes out wider than the next; its size is set before the first
+// paint, rounded up to the 1/64px layout keeps, so nothing moves
+function badgeFit() {
+  const r = devicePixelRatio || 1, k = Math.max(1, Math.round(3 * r));
+  document.documentElement.style.setProperty("--bw", Math.ceil(88 * k / r * 64) / 64 + "px");
+}
+badgeFit();
+</script>{{end}}
+
+{{define "badgecss"}}
+/* the badge at its own size and enlarged: side by side, or stacked on a
+   phone; the enlarged one gives way rather than overflow a narrow one */
+.badges { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: center; gap: 12px 32px; margin: 12px 0 14px; }
+.badges figure { margin: 0; min-width: 0; }
+.badges img { display: block; margin: 0 auto 6px; image-rendering: pixelated; }
+.badges .big { width: var(--bw, 264px); max-width: 100%; height: auto; }
+.badges figcaption { text-align: center; font-size: 11px; line-height: 14px; color: #555; }
+.snips label { display: block; margin: 0 0 4px; font-weight: bold; line-height: 16px; }
+.snips .field + label { margin-top: 10px; }
+{{end}}
+
+{{/* badgeKit(said): the enlarged badge kept on the screen's own pixels;
+     and Copy, which puts a snippet on the clipboard and says so in said,
+     or where the clipboard is not offered leaves the snippet selected
+     for the reader's own copy. */}}
+{{define "badgejs"}}<script>
+function badgeKit(said) {
   // and it stands on whole screen pixels: where layout leaves it between
   // two (an odd CSS pixel at 150 percent), it is moved the fraction onto
   // the grid, or its outermost rows blend with the page; a zoom fits both
   // again, since it changes the screen pixels a CSS pixel holds
-  const big = document.querySelector(".big");
+  const big = document.querySelector(".badges .big");
   const grid = () => {
+    if (!big) return;
     big.style.translate = "";
     const b = big.getBoundingClientRect(), d = devicePixelRatio || 1;
     const off = v => (Math.round(v * d) - v * d) / d;
@@ -93,16 +111,13 @@ label { display: block; margin: 0 0 4px; font-weight: bold; line-height: 16px; }
   grid();
   addEventListener("resize", () => { badgeFit(); grid(); });
 
-  const said = document.getElementById("said");
-  for (const f of document.querySelectorAll(".snip")) f.addEventListener("focus", () => f.select());
-  for (const b of document.querySelectorAll(".copy")) b.addEventListener("click", () => {
-    const f = document.getElementById(b.dataset.for), name = f.id === "html" ? "The HTML" : "The Markdown";
+  for (const f of document.querySelectorAll(".snips .snip")) f.addEventListener("focus", () => f.select());
+  for (const b of document.querySelectorAll(".copy[data-for]")) b.addEventListener("click", () => {
+    const f = document.getElementById(b.dataset.for), name = b.dataset.name;
     f.select();
     const left = () => { said.textContent = name + " is selected for you to copy."; };
     if (!navigator.clipboard || !navigator.clipboard.writeText) return left();
     navigator.clipboard.writeText(f.value).then(() => { said.textContent = name + " is on your clipboard."; }, left);
   });
-})();
-</script>
-</body>
-</html>{{end}}
+}
+</script>{{end}}

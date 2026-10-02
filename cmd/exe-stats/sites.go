@@ -38,6 +38,7 @@ type siteEntry struct {
 	saved      int64   // the site.Seen the store has
 	backfilled bool    // site.Seen has been read from the site's own hits
 	refused    refusal // the last beacon refused for this site, since the server started
+	badge      siteBadge
 }
 
 func (e *siteEntry) close() {

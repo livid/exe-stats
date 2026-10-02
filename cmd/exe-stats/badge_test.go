@@ -95,3 +95,71 @@ func TestBadgePage(t *testing.T) {
 		}
 	}
 }
+
+// TestCounterFace: the Hit Counter is badge.py's drawing. Its first
+// frame, given badge.gif's numbers — 01997, and the day up to the 18:00
+// bar five px into it — is badge.gif's first frame, pixel for pixel.
+func TestCounterFace(t *testing.T) {
+	g, err := gif.DecodeAll(bytes.NewReader(badgeGIF))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := counterFrame{wheels: positions(1997, wheels), blur: make([]bool, wheels),
+		bars: [12]int{4, 3, 2, 3, 6, 9, 11, 12, 11, 5, 0, 0}, cur: 9}
+	c, want := f.draw(nil), g.Image[0]
+	bad := 0
+	for y := range ch {
+		for x := range cw {
+			r0, g0, b0, _ := counterPal[counterIndex[c[y][x]]].RGBA()
+			r1, g1, b1, _ := want.At(x, y).RGBA()
+			if r0 != r1 || g0 != g1 || b0 != b1 {
+				if bad++; bad <= 5 {
+					t.Errorf("(%d, %d) is %q here and not in badge.gif", x, y, c[y][x])
+				}
+			}
+		}
+	}
+	if bad > 0 {
+		t.Fatalf("%d px differ from badge.gif's first frame", bad)
+	}
+}
+
+// TestCounterLoop: a day with views plays the day back and comes to rest
+// on the frame it began with; a day with none stands still; a count past
+// five wheels is told in thousands.
+func TestCounterLoop(t *testing.T) {
+	day := counterDay{Total: 1234, Bars: [12]int64{3, 1, 0, 2, 9, 30, 41, 52, 40, 12}, Now: 9, Top: 60}
+	fs := counterFrames(day)
+	first, end := fs[0], fs[len(fs)-1]
+	if got := first.wheels[wheels-1]; got != 1234 || first.lit || first.cur != 9 || first.bars[7] != 10 || first.bars[9] != 2 {
+		t.Fatalf("the first frame: wheels %v, bars %v", first.wheels, first.bars)
+	}
+	// the last frame sits half a number short of the first, still lit
+	if got := end.wheels[wheels-1]; got != 1233.5 || !end.lit || end.bars != first.bars {
+		t.Errorf("the last frame: wheels %v, bars %v, want 1233.5 and the first's bars", end.wheels, end.bars)
+	}
+	low := 1e9
+	for _, f := range fs {
+		low = min(low, f.wheels[wheels-1])
+	}
+	if low != 1044 {
+		t.Errorf("the day replays from %v, want the count at midnight, 1044", low)
+	}
+
+	if fs := counterFrames(counterDay{Total: 42, Now: 3, Top: 5}); len(fs) != 1 {
+		t.Errorf("a day with no views has %d frames, want 1", len(fs))
+	}
+	big := counterFrames(counterDay{Total: 1234567, Bars: [12]int64{1}, Top: 1})
+	if got := big[0].wheels; len(got) != wheels-1 || got[wheels-2] != 1234 {
+		t.Errorf("1,234,567 stands on the wheels as %v, want 1234 and a K", got)
+	}
+	for name, d := range map[string]counterDay{"a day": day, "a quiet one": {Total: 7, Now: 5}, "a big one": {Total: 1234567, Bars: [12]int64{500, 9000}, Now: 1, Top: 9000}} {
+		g, err := gif.DecodeAll(bytes.NewReader(drawCounter(d)))
+		if err != nil || g.Config.Width != 88 || g.Config.Height != 31 {
+			t.Fatalf("%s: %v, %d×%d", name, err, g.Config.Width, g.Config.Height)
+		}
+		if g.Delay[0] < 300 {
+			t.Errorf("%s: the first frame stands %d cs, want it held", name, g.Delay[0])
+		}
+	}
+}

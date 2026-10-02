@@ -261,6 +261,32 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     await blog.ctx.close();
     await hp.close();
 
+    // ---- the badge: none until a style is chosen, then the site's own ----
+    const bp = await rich.ctx.newPage();
+    bp.errors = [];
+    bp.on('pageerror', e => bp.errors.push(String(e)));
+    bp.on('console', m => { if (m.type() === 'error') bp.errors.push(m.text()); });
+    const gifURL = `${APP}/badge/${siteId}.gif`;
+    ok((await bp.request.get(gifURL)).status() === 404, 'a new site shows no badge');
+    await bp.goto(`${APP}/sites/${siteId}/settings`);
+    ok(await bp.locator('#badge-style').inputValue() === '0' && await bp.locator('#badge-html').count() === 0, 'the badge waits for a style');
+    const popup = await box(bp, '#badge .popup');
+    ok(Math.round(popup.height) === 19, 'the style is a 19px pop-up', popup);
+    await Promise.all([bp.waitForNavigation(), bp.selectOption('#badge-style', '1')]);
+    ok(new URL(bp.url()).hash === '#badge' && await bp.locator('#badge-said').innerText() === 'The badge is on: any page may show it.', 'choosing Hit Counter puts it on, and says so', bp.url());
+    ok(await bp.locator('#hosts-said').innerText() === '', 'and says it only there');
+    await bp.waitForFunction(() => [...document.querySelectorAll('.badges img')].every(i => i.complete && i.naturalWidth === 88));
+    ok(await bp.locator('#badge-html').inputValue() === `<a href="${APP}/"><img src="${gifURL}" width="88" height="31" alt="shop.example page views, counted by exe-stats"></a>`, "the HTML shows the site's own badge", await bp.locator('#badge-html').inputValue());
+    const res = await bp.request.get(gifURL);
+    ok(res.status() === 200 && res.headers()['content-type'] === 'image/gif' && res.headers()['cache-control'] === 'public, max-age=300', 'and it is there for any page, kept five minutes', res.headers());
+    await bp.click('.copy[data-for="badge-html"]');
+    await bp.waitForFunction(() => document.getElementById('badge-said').textContent.startsWith('The HTML'), null, { timeout: 3000 }).catch(() => {});
+    const copied = await bp.locator('#badge-said').innerText();
+    ok(/^The HTML is (on your clipboard|selected for you to copy)\.$/.test(copied), 'Copy HTML says what it did', copied);
+    ok(bp.errors.length === 0, 'no script errors with the badge', bp.errors);
+    await shot(bp, 'badge-on-dpr1');
+    await bp.close();
+
     // ---- the account at every scale and on a phone ----
     const cookies = await rich.ctx.cookies();
     ok(cookies.length === 1 && cookies[0].httpOnly && cookies[0].sameSite === 'Lax', 'the session is one HttpOnly, SameSite=Lax cookie');
@@ -278,7 +304,16 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
       await c.page.goto(`${APP}/sites/${siteId}/settings`);
       ok(await c.page.locator('#setup.ok').count() === 1 && await noScroll(c.page), `${tag}: the settings show the green check and do not scroll sideways`);
       const heights = await c.page.locator('#settings .btn:not(.tbox)').evaluateAll(bs => bs.map(x => Math.round(x.getBoundingClientRect().height)));
-      ok(heights.length === 4 && heights.every(h => h === 20), `${tag}: settings buttons are 20px high`, heights);
+      ok(heights.length === 6 && heights.every(h => h === 20), `${tag}: settings buttons are 20px high`, heights);
+      // the enlarged badge stands on whole screen pixels, the same number
+      // for each of its own
+      await c.page.waitForFunction(() => document.querySelector('.badges .big').complete);
+      const big = await c.page.evaluate(() => {
+        const b = document.querySelector('.badges .big'), r = b.getBoundingClientRect(), d = devicePixelRatio;
+        return { w: r.width * d, x: (r.left + scrollX) * d, y: (r.top + scrollY) * d, done: b.complete && b.naturalWidth === 88 };
+      });
+      const whole = v => Math.abs(v - Math.round(v)) < 0.02;
+      ok(big.done && whole(big.w / 88) && whole(big.x) && whole(big.y), `${tag}: the enlarged badge is on whole screen pixels`, big);
       const rows = await c.page.locator('.list .row').evaluateAll(rs => rs.map(x => Math.round(x.getBoundingClientRect().height)));
       ok(rows.length === 2 && rows.every(h => h === (v.phone ? 24 : 18)), `${tag}: the hosts list has its rows at their height`, rows);
       // the line keeps the room of its longest wording, so the check's turn
@@ -296,6 +331,8 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
         'A view of shop.example was sent from translate.goog 59 min ago, and was not counted.']);
       ok(room.hs.every(h => h <= room.min), `${tag}: the line's room holds its wordings`, room);
       await shot(c.page, 'settings-' + tag);
+      await c.page.locator('#badge').evaluate(x => x.scrollIntoView({ block: 'end' }));
+      await shot(c.page, 'settings-badge-' + tag);
       await c.ctx.close();
     }
 

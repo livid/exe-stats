@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS sites (
   created INTEGER NOT NULL,
   seen    INTEGER NOT NULL DEFAULT 0,      -- ms; the last view from the site's own pages: the snippet is in place
   hosts   TEXT NOT NULL DEFAULT '',        -- more hosts whose pages count, space-separated: blog.example.com, *.example.com
+  badge   INTEGER NOT NULL DEFAULT 0,      -- the badge's style (sitebadge.go); 0: none, the numbers kept to the owner
   UNIQUE (addr, domain)
 );
 CREATE INDEX IF NOT EXISTS sites_addr ON sites(addr);
@@ -58,8 +59,8 @@ CREATE TABLE IF NOT EXISTS usage (
 	if err != nil {
 		return nil, err
 	}
-	// a file made before the setup check, or before hosts, gains its column
-	for _, col := range []string{`seen INTEGER NOT NULL DEFAULT 0`, `hosts TEXT NOT NULL DEFAULT ''`} {
+	// a file made before the setup check, hosts or the badge gains its column
+	for _, col := range []string{`seen INTEGER NOT NULL DEFAULT 0`, `hosts TEXT NOT NULL DEFAULT ''`, `badge INTEGER NOT NULL DEFAULT 0`} {
 		if _, err := db.Exec(`ALTER TABLE sites ADD COLUMN ` + col); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			return nil, err
 		}
@@ -148,9 +149,10 @@ type Site struct {
 	ID, Addr, Domain, TZ  string
 	Picked, Created, Seen int64
 	Hosts                 []string // more hosts that count besides Domain (hosts.go)
+	Badge                 int      // the badge's style, 0 none (sitebadge.go)
 }
 
-const siteCols = `id, addr, domain, tz, picked, created, seen, hosts`
+const siteCols = `id, addr, domain, tz, picked, created, seen, hosts, badge`
 
 var errSiteExists = errors.New("that site is already here")
 
@@ -174,7 +176,7 @@ func scanSites(rows *sql.Rows, err error) ([]Site, error) {
 	for rows.Next() {
 		var st Site
 		var hosts string
-		if err := rows.Scan(&st.ID, &st.Addr, &st.Domain, &st.TZ, &st.Picked, &st.Created, &st.Seen, &hosts); err != nil {
+		if err := rows.Scan(&st.ID, &st.Addr, &st.Domain, &st.TZ, &st.Picked, &st.Created, &st.Seen, &hosts, &st.Badge); err != nil {
 			return nil, err
 		}
 		st.Hosts = strings.Fields(hosts)
@@ -209,6 +211,12 @@ func (s *Store) saveSeen(id string, ms int64) error {
 // setHosts writes down the hosts that count for a site besides its domain.
 func (s *Store) setHosts(id string, hosts []string) error {
 	_, err := s.db.Exec(`UPDATE sites SET hosts=? WHERE id=?`, strings.Join(hosts, " "), id)
+	return err
+}
+
+// setBadge writes down a site's badge style.
+func (s *Store) setBadge(id string, style int) error {
+	_, err := s.db.Exec(`UPDATE sites SET badge=? WHERE id=?`, style, id)
 	return err
 }
 

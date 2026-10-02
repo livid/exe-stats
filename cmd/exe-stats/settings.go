@@ -115,6 +115,11 @@ type settingsData struct {
 	Note                          string    // a view refused while the snippet works
 	Hosts                         []hostRow // besides the domain
 	Said, Fault                   string    // what the last press did
+	SaidIn                        string    // and the section it says it in
+	Badge                         int       // the badge's style; 0 none
+	Styles                        []styleRow
+	BadgeSrc, BadgeHTML, BadgeMD  string
+	BadgeAlt                      string
 }
 
 // GET /sites/{id}/settings — a site's settings, for its owner alone.
@@ -143,9 +148,12 @@ func (a *App) handleSettings(w http.ResponseWriter, r *http.Request) {
 		TZ: e.site.TZ, Counting: a.counting(ac, e.site.ID)}
 	d.Setup, d.Note = a.setupOf(e, now)
 	d.Hosts = hostRows(e.site)
+	d.Badge, d.Styles = e.site.Badge, badgeRows(e.site.Badge)
+	d.BadgeSrc, d.BadgeHTML, d.BadgeMD, d.BadgeAlt = a.badgeLinks(r, e.site)
 	a.mu.Unlock()
 	q := r.URL.Query()
 	d.Said, d.Fault = notes[q.Get("m")], faults[q.Get("e")]
+	d.SaidIn = saidIn(q.Get("m") + q.Get("e"))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	if err := a.tmpl.ExecuteTemplate(w, "settings", d); err != nil {

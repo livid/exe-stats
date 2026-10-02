@@ -37,6 +37,8 @@ var notes = map[string]string{
 	// a site's settings
 	"hostadded":   "The host counts now.",
 	"hostremoved": "That host no longer counts.",
+	"badgeon":     "The badge is on: any page may show it.",
+	"badgeoff":    "The badge is off. A page that still links it shows no picture there.",
 }
 
 var faults = map[string]string{
@@ -51,10 +53,21 @@ var faults = map[string]string{
 	"failed":  "That did not work. Nothing has changed.",
 	"foreign": "Press the button on this site's own page.",
 	// a site's settings
-	"host":    "That does not read as a host: type it like blog.example.com, or *.example.com.",
-	"counts":  "That host counts already.",
-	"hostmax": "A site lists at most 20 hosts.",
-	"nohost":  "Choose a host in the list first.",
+	"host":        "That does not read as a host: type it like blog.example.com, or *.example.com.",
+	"counts":      "That host counts already.",
+	"hostmax":     "A site lists at most 20 hosts.",
+	"nohost":      "Choose a host in the list first.",
+	"style":       "That is not one of the badge's styles.",
+	"badgefailed": "That did not work. Nothing has changed.",
+}
+
+// saidIn is the settings section a word answers, by its word: the
+// badge's own, and the hosts' for the rest.
+func saidIn(word string) string {
+	if strings.HasPrefix(word, "badge") || word == "style" {
+		return "badge"
+	}
+	return "hosts"
 }
 
 type tierRow struct {

@@ -173,7 +173,9 @@
      change: the line has the room of its longest wording. Hosts: the
      hosts whose pages count besides the domain, a list box with Remove
      under it and a field to add one; each press is a form answered with
-     the page again. */}}
+     the page again. Badge: a pop-up of styles, None until the owner
+     chooses one, and while one is on the site's badge as it stands, with
+     the HTML and the Markdown that show it. */}}
 {{define "settings"}}<!doctype html>
 <html lang="en">
 <head>
@@ -181,7 +183,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{{.Domain}} Settings · {{.Host}}</title>
 <meta name="theme-color" content="#dddddd">
-<style>{{chrome}}{{template "style"}}
+{{if .Badge}}{{template "badgefit"}}{{end}}
+<style>{{chrome}}{{popup}}{{template "style"}}{{template "badgecss"}}
 h2 { margin: 0 0 8px; font-size: 12px; line-height: 16px; }
 /* the check: the HIG's check box mark (Fig. 2-9) on a 16px grid, beside
    its line as a check box's box sits beside its label; dim while the page
@@ -207,6 +210,9 @@ section + section { margin-top: 12px; padding-top: 12px; border-top: 1px solid #
 .list .row:has(input:checked) { background: #333399; color: #fff; }
 .list .row:has(input:checked) .note { color: #fff; }
 @media (pointer: coarse) { .list .row { height: 24px; } }
+/* the badge's style: a pop-up after its label, as a control panel has it */
+.style { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; }
+.style .popup { width: 140px; }
 </style>
 </head>
 <body>
@@ -242,12 +248,43 @@ section + section { margin-top: 12px; padding-top: 12px; border-top: 1px solid #
         <input class="field" name="host" placeholder="blog.{{.Domain}}" aria-label="A host to count" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="255">
         <button class="btn">Add Host</button>
       </form>
-      <p class="flash{{if .Fault}} fault{{end}}" id="hosts-said" role="status">{{if .Fault}}{{.Fault}}{{else}}{{.Said}}{{end}}</p>
+      <p class="flash{{if and .Fault (eq .SaidIn "hosts")}} fault{{end}}" id="hosts-said" role="status">{{if eq .SaidIn "hosts"}}{{if .Fault}}{{.Fault}}{{else}}{{.Said}}{{end}}{{end}}</p>
+      </section>
+      <section id="badge">
+      <h2>Badge</h2>
+      <p>An 88×31 button for the site's own pages, with its numbers on it for anyone to read. Hit Counter turns its wheels to every page view since the site was added, beside today's in bars of two hours.</p>
+      <form class="style" method="post" action="/v1/sites/{{.ID}}/badge">
+        <label for="badge-style">Style:</label>
+        <span class="popup"><select id="badge-style" name="style">{{range .Styles}}<option value="{{.Value}}"{{if .On}} selected{{end}}>{{.Name}}</option>{{end}}</select><span class="well"><i><b></b></i></span></span>
+        <noscript><button class="btn">Set</button></noscript>
+      </form>
+      {{if .Badge}}<div class="badges">
+        <figure><img src="{{.BadgeSrc}}" width="88" height="31" alt="{{.BadgeAlt}}"><figcaption>Its own size</figcaption></figure>
+        <figure><img class="big" src="{{.BadgeSrc}}" width="264" height="93" alt="{{.BadgeAlt}}, enlarged"><figcaption>Enlarged</figcaption></figure>
+      </div>
+      <p>Its numbers are drawn again every few minutes. Paste one of these where the badge should go:</p>
+      <div class="snips">
+        <label for="badge-html">HTML</label>
+        <input class="field snip" id="badge-html" readonly value="{{.BadgeHTML}}">
+        <label for="badge-md">Markdown</label>
+        <input class="field snip" id="badge-md" readonly value="{{.BadgeMD}}">
+      </div>
+      <div class="buttons">
+        <button class="btn copy" type="button" data-for="badge-md" data-name="The Markdown">Copy Markdown</button>
+        <button class="btn copy" type="button" data-for="badge-html" data-name="The HTML">Copy HTML</button>
+      </div>
+      {{end}}<p class="flash{{if and .Fault (eq .SaidIn "badge")}} fault{{end}}" id="badge-said" role="status">{{if eq .SaidIn "badge"}}{{if .Fault}}{{.Fault}}{{else}}{{.Said}}{{end}}{{end}}</p>
       </section>
     </div>
     <div class="statusbar"><span>{{if .Counting}}Counting{{else}}Resting{{end}}</span><span>Days begin in {{.TZ}}</span></div>
   </div>
 </div>
+{{if .Badge}}{{template "badgejs"}}
+<script>badgeKit(document.getElementById("badge-said"));</script>
+{{end}}<script>
+// the badge's style takes effect when it is chosen
+document.getElementById("badge-style").addEventListener("change", e => e.target.form.submit());
+</script>
 <script>
 (() => {
   const f = document.getElementById("snip");
