@@ -171,5 +171,6 @@ a real key, a fake RPC, and a site carrying the snippet; its head says
 how to run it.
 
 Not built yet: a public link to a desk, more than one wallet on an
-account, a note by email or push when a grace begins, export, and
-closing the files of sites nobody has read for a while.
+account, a note by email or push when a grace begins, export, a privacy
+page for the sites' own readers, and closing the files of sites nobody
+has read for a while.
