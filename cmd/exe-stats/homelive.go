@@ -38,8 +38,8 @@ type liveSite struct {
 	Bars  []barView `json:"bars"`
 }
 
-// siteDay is a site's day as last drawn, for every stream that asks
-// within a tick.
+// siteDay is a site's day as last drawn — its bars, and its views and
+// who is online in words — for every stream that asks within a tick.
 type siteDay struct {
 	mu    sync.Mutex
 	at    time.Time
@@ -59,7 +59,8 @@ func dayOf(d *siteDay, st *stats.Stats, now time.Time) ([]barView, string, error
 	if err != nil {
 		return nil, "", err
 	}
-	d.bars, d.today = drawDay(pts)
+	bars, views := drawDay(pts)
+	d.bars, d.today = bars, dayLine(views, st.Online())
 	d.at = now
 	return d.bars, d.today, nil
 }

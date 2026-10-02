@@ -103,8 +103,15 @@ func (row *siteRow) today(now time.Time) error {
 	if err != nil {
 		return err
 	}
-	row.Bars, row.Today = drawDay(pts)
+	bars, views := drawDay(pts)
+	row.Bars, row.Today = bars, dayLine(views, row.st.Online())
 	return nil
+}
+
+// dayLine is the words beside a site's day: its views and who is on it
+// now (a page in the last five minutes, as the desk's Live has it).
+func dayLine(views string, online int) string {
+	return views + " · " + commas(int64(online)) + " online"
 }
 
 // drawDay is a day's chart as its row draws it: its bars, and its views

@@ -158,7 +158,7 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     ok(await page.locator('#sites .snip, #sites .copy').count() === 0, 'the Sites window carries no snippet');
     ok((await page.locator('.site .name').innerText()) === 'shop.example', 'the domain is read out of a pasted address');
     ok((await page.locator('.site .st').innerText()) === 'Counting', 'the site counts');
-    ok((await page.locator('.site .tv').innerText()) === '0 views today', "the site's day is empty yet", await page.locator('.site .tv').innerText());
+    ok((await page.locator('.site .tv').innerText()) === '0 views today · 0 online', "the site's day is empty yet, and nobody is on it", await page.locator('.site .tv').innerText());
     for (const sel of ['.add .field', '.add .btn', '.site .buttons .btn']) {
       const b = await box(page, sel);
       ok(Math.round(b.height) === 20, sel + ' is 20px high', b);
@@ -211,7 +211,7 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     await set.close();
 
     // ---- the Sites window, left open, counts the views as they come ----
-    const liveDay = await page.waitForFunction(() => document.querySelector('.site .tv').textContent === '3 views today'
+    const liveDay = await page.waitForFunction(() => document.querySelector('.site .tv').textContent === '3 views today · 1 online'
       && document.querySelector('.site .bars i.now').getBoundingClientRect().height === 24
       && /^3 of /.test(document.getElementById('used').parentElement.textContent), null, { timeout: 10000 }).then(() => true).catch(() => false);
     ok(liveDay, "the open page's day, its bar and the month's count follow the views without a reload",
@@ -225,7 +225,12 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
         to: bars.filter(x => x.className === 'to').length, w: b.width, h: b.height, tv: document.querySelector('.site .tv').textContent };
     });
     ok(day.n >= 23 && day.n <= 25 && day.now.length === 1 && day.now[0] === 24, "the day is a bar an hour, this hour's the busiest and still filling", day);
-    ok(day.tv === '3 views today' && Math.round(day.w) === 8 * day.n + 4 && Math.round(day.h) === 30, 'its views in words, and the box is the whole day wide', day);
+    ok(day.tv === '3 views today · 1 online' && Math.round(day.w) === 8 * day.n + 4 && Math.round(day.h) === 30, 'its views and who is on it in words, and the box is the whole day wide', day);
+    ok(await page.locator('.site .bars').getAttribute('href') === `/sites/${siteId}` && await page.locator('.site .bars').evaluate(e => getComputedStyle(e).cursor) === 'default',
+      'the day is a press to the desk, with no pointing hand');
+    await Promise.all([page.waitForNavigation(), page.click('.site .bars')]);
+    ok(page.url() === `${APP}/sites/${siteId}`, 'a press on the day opens the desk', page.url());
+    await Promise.all([page.waitForNavigation(), page.goBack()]);
 
     // ---- the desk ----
     await Promise.all([page.waitForNavigation(), page.click('.site .name')]);

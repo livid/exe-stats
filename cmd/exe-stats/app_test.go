@@ -241,7 +241,7 @@ func TestSitesAndBeacons(t *testing.T) {
 	if !strings.Contains(h.do(w, "GET", "/sites/"+shop+"/settings", "", nil).Body.String(), snippet) {
 		t.Fatal("the settings do not carry the snippet")
 	}
-	if home := h.do(w, "GET", "/", "", nil).Body.String(); strings.Contains(home, "data-site=") || strings.Count(home, `<span class="bars"`) != 2 {
+	if home := h.do(w, "GET", "/", "", nil).Body.String(); strings.Contains(home, "data-site=") || strings.Count(home, `<a class="bars" href="/sites/`) != 2 {
 		t.Fatal("the Sites window carries a snippet, or not a day's bars a site")
 	}
 
@@ -784,7 +784,7 @@ func TestTodayHalfHour(t *testing.T) {
 			t.Fatalf("a bar to come holds views: %+v", row.Bars)
 		}
 	}
-	if shown != 1 || row.Today != "1 view today" {
+	if shown != 1 || !strings.HasPrefix(row.Today, "1 view today · ") {
 		t.Fatalf("%d bars hold the view, %q", shown, row.Today)
 	}
 }

@@ -42,7 +42,7 @@
     <div class="body">
       {{range .Sites}}<div class="site" id="s-{{.ID}}">
         <div class="sline">{{if .Icon}}<img class="ico" src="/sites/{{.ID}}/icon?v={{.Stamp}}" width="16" height="16" alt="">{{end}}<a class="name" href="/sites/{{.ID}}">{{.Domain}}</a><span class="st">{{if .Counting}}Counting{{else}}Resting{{end}}</span></div>
-        <div class="today"><span class="bars" role="img" aria-label="{{.Domain}} today, a bar an hour: {{.Today}}">{{range .Bars}}<i{{with .Class}} class="{{.}}"{{end}} style="height: {{.H}}px"{{with .Title}} title="{{.}}"{{end}}></i>{{end}}</span><span class="tv">{{.Today}}</span></div>
+        <div class="today"><a class="bars" href="/sites/{{.ID}}" aria-label="The desk of {{.Domain}}. Today, a bar an hour: {{.Today}}">{{range .Bars}}<i{{with .Class}} class="{{.}}"{{end}} style="height: {{.H}}px"{{with .Title}} title="{{.}}"{{end}}></i>{{end}}</a><span class="tv">{{.Today}}</span></div>
         {{if .Removing}}<div class="buttons">
           <span class="say">Remove {{.Domain}} and its numbers? This cannot be undone.</span>
           <a class="btn" href="/#s-{{.ID}}">Cancel</a>
@@ -449,11 +449,15 @@ dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
    come empty, so the box is the day's whole width all day */
 .site .today { display: flex; align-items: center; gap: 12px; margin: 0 0 8px; }
 .site .bars { flex: none; display: flex; align-items: flex-end; gap: 2px; box-sizing: content-box; height: 24px; padding: 2px; background: #fff;
+  text-decoration: none; cursor: default; /* a press opens the desk, as the name does */
   border: 1px solid #262626; box-shadow: -1px -1px 0 #999, 1px 1px 0 #fff; }
 .site .bars i { display: block; flex: none; width: 6px; background: #666699; }
 .site .bars i.now { background: #9999cc; }
 .site .bars i.to { background: none; }
 .site .today .tv { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #555; line-height: 16px; }
+/* on a phone the words go under the day: beside it they would not fit,
+   and the width decides, not the words, so a count that grows moves nothing */
+@media (max-width: 479px) { .site .today { flex-direction: column; align-items: flex-start; gap: 4px; } }
 .site .st { margin-left: auto; color: #555; white-space: nowrap; }
 .add { display: flex; gap: 12px; align-items: center; margin: 0 0 8px; }
 .add .field { flex: 1; min-width: 0; }
