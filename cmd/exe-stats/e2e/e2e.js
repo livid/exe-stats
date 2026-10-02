@@ -7,8 +7,9 @@
 //     NODE_PATH=~/tools/playwright/node_modules node cmd/exe-stats/e2e/e2e.js
 //
 // E2E_DIR is the scratch server's data directory: it must not exist yet,
-// so a run can never land on a real one. Ports: 7795 the server, 17795
-// the RPC, 17796 the site (shop.example is mapped to it in the browser).
+// so a run can never land on a real one. Ports: 17797 the server (7795 is
+// the live one's: a port that already answers is refused), 17795 the
+// RPC, 17796 the site (shop.example is mapped to it in the browser).
 const { chromium } = require('playwright');
 const http = require('http'), crypto = require('crypto'), fs = require('fs'), path = require('path');
 const { spawn } = require('child_process');
@@ -16,7 +17,7 @@ const { spawn } = require('child_process');
 const BIN = process.env.E2E_BIN, DIR = process.env.E2E_DIR, SHOTS = process.env.SHOTS;
 if (!BIN || !DIR) { console.error('E2E_BIN and E2E_DIR are needed'); process.exit(2); }
 if (fs.existsSync(DIR)) { console.error('E2E_DIR exists: give a fresh path'); process.exit(2); }
-const APP = 'http://127.0.0.1:7795';
+const APP = 'http://127.0.0.1:17797';
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
 
 const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
@@ -95,8 +96,9 @@ const box = (page, sel) => page.locator(sel).first().boundingBox();
 const noScroll = page => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth);
 
 (async () => {
+  try { await fetch(APP + '/robots.txt'); console.error(`a server already answers on ${APP}: not testing against it`); process.exit(2); } catch (e) {}
   fs.mkdirSync(DIR, { recursive: true });
-  fs.writeFileSync(path.join(DIR, 'config.json'), JSON.stringify({ listen: '127.0.0.1:7795', data: path.join(DIR, 'data'), rpc_url: 'http://127.0.0.1:17795' }));
+  fs.writeFileSync(path.join(DIR, 'config.json'), JSON.stringify({ listen: '127.0.0.1:17797', data: path.join(DIR, 'data'), rpc_url: 'http://127.0.0.1:17795' }));
   await new Promise(r => rpc.listen(17795, '127.0.0.1', r));
   await new Promise(r => site.listen(17796, '127.0.0.1', r));
   const srv = spawn(BIN, ['-config', path.join(DIR, 'config.json')], { stdio: ['ignore', fs.openSync(path.join(DIR, 'server.log'), 'a'), fs.openSync(path.join(DIR, 'server.log'), 'a')] });
@@ -142,7 +144,7 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     ok((await page.locator('#account dl').innerText()).includes('12,000 $V2EX'), 'signed in: the holding is read', await page.locator('#account dl').innerText());
     ok((await page.locator('#account dl').innerText()).includes('Base'), 'signed in: the tier is Base');
     ok(await page.locator('#tiers tr.on td').first().innerText() === 'Base', 'the tier in force is the marked row');
-    ok(signed === '' || signed.startsWith('127.0.0.1:7795 wants you to sign in with your Solana account:\n' + keys.Rich.addr), 'the signed text names the host and the address', signed);
+    ok(signed === '' || signed.startsWith(new URL(APP).host + ' wants you to sign in with your Solana account:\n' + keys.Rich.addr), 'the signed text names the host and the address', signed);
 
     // ---- add a site, get the snippet ----
     await page.fill('.add .field', 'https://www.shop.example/some/page');
@@ -160,6 +162,21 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     const tz = await page.evaluate(() => document.getElementById('tz').value);
     ok(tz && tz !== '', 'the form carries the time zone', tz);
 
+    // ---- its settings: the setup check waits for the first view ----
+    const sHref = await page.locator('.site .buttons a:has-text("Settings…")').getAttribute('href');
+    ok(sHref === `/sites/${siteId}/settings`, 'Settings… leads to the site\'s settings', sHref);
+    const set = await rich.ctx.newPage();
+    set.errors = [];
+    set.on('pageerror', e => set.errors.push(String(e)));
+    await set.goto(APP + sHref);
+    ok(await set.locator('#setup.ok').count() === 0, 'before any view the lamp is not green');
+    ok((await set.locator('#setup-line').innerText()).startsWith('Waiting for the first page view.'), 'and the line says it waits', await set.locator('#setup-line').innerText());
+    ok(await set.locator('#snip').inputValue() === snippet, 'the settings carry the same snippet');
+    const lampWait = await box(set, '#setup .lamp'), snipWait = await box(set, '#snip');
+    ok(lampWait.width === 32 && lampWait.height === 32, 'the lamp is 32px', lampWait);
+    ok(await set.locator('.lamp .mark').isHidden(), 'and has no check yet');
+    await shot(set, 'settings-wait-dpr1');
+
     // ---- the snippet on the site: a load, a pushState, a hash, another load ----
     const visitor = await context(browser, []);
     const beacons = [];
@@ -174,6 +191,19 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     await visitor.page.waitForTimeout(1500); // the site's writer lands its batch once a second
     ok(visitor.page.errors.length === 0, 'the snippet throws nothing on the site', visitor.page.errors);
     await visitor.ctx.close();
+
+    // ---- the settings page, left open, turns green by itself ----
+    await set.waitForSelector('#setup.ok', { timeout: 10000 }).catch(() => {});
+    ok(await set.locator('#setup.ok').count() === 1, 'a view on the site turns the lamp green without a reload');
+    ok((await set.locator('#setup-line').innerText()) === 'The snippet works: the last page view came just now.', 'and the line says the snippet works', await set.locator('#setup-line').innerText());
+    ok(await set.locator('.lamp .mark').isVisible(), 'the check is drawn');
+    const face = await set.evaluate(() => getComputedStyle(document.querySelector('.lamp .face')).fill);
+    ok(face === 'rgb(31, 158, 51)', 'the lamp is the pass green', face);
+    const snipOk = await box(set, '#snip');
+    ok(snipOk.y === snipWait.y, 'nothing under the line moved', [snipWait, snipOk]);
+    ok(set.errors.length === 0, 'no script errors on the settings page', set.errors);
+    await shot(set, 'settings-ok-dpr1');
+    await set.close();
 
     // ---- the desk ----
     await Promise.all([page.waitForNavigation(), page.click('.site .name')]);
@@ -204,7 +234,28 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
       ok(await c.page.locator('#account').count() === 1 && await noScroll(c.page), `${tag}: the account page does not scroll sideways`);
       const b = await box(c.page, '#account .buttons .btn');
       ok(Math.round(b.height) === 20, `${tag}: account buttons are 20px high`, b);
+      const tops = await c.page.locator('.site .buttons .btn').evaluateAll(bs => bs.filter(x => x.offsetParent).map(x => Math.round(x.getBoundingClientRect().top)));
+      ok(tops.length >= 3 && tops.every(t => t === tops[0]), `${tag}: a site's buttons are one row`, tops);
       await shot(c.page, 'account-' + tag);
+      await c.page.goto(`${APP}/sites/${siteId}/settings`);
+      ok(await c.page.locator('#setup.ok').count() === 1 && await noScroll(c.page), `${tag}: the settings show the green lamp and do not scroll sideways`);
+      const heights = await c.page.locator('#settings .btn:not(.tbox)').evaluateAll(bs => bs.map(x => Math.round(x.getBoundingClientRect().height)));
+      ok(heights.length === 2 && heights.every(h => h === 20), `${tag}: settings buttons are 20px high`, heights);
+      // the line keeps the room of its longest wording, so the lamp's turn
+      // moves nothing — measured in DejaVu Sans, Verdana's width, which is
+      // where an iPhone and Windows land in the font stack
+      const room = await c.page.evaluate(lines => {
+        const p = document.getElementById('setup-line'), keep = p.textContent, min = parseFloat(getComputedStyle(p).minHeight);
+        p.style.minHeight = '0';
+        p.style.fontFamily = '"DejaVu Sans"';
+        const hs = lines.map(t => { p.textContent = t; return p.getBoundingClientRect().height; });
+        p.textContent = keep; p.style.minHeight = p.style.fontFamily = '';
+        return { min, hs };
+      }, ['Waiting for the first page view. Paste the snippet into the site\'s head, then open a page.',
+        'A view came from staging.shop.example 59 min ago and was not counted: this site is shop.example.',
+        'A view of shop.example was sent from translate.goog 59 min ago, and was not counted.']);
+      ok(room.hs.every(h => h <= room.min), `${tag}: the line's room holds its wordings`, room);
+      await shot(c.page, 'settings-' + tag);
       await c.ctx.close();
     }
 

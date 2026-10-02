@@ -11,67 +11,7 @@
 <title>Stats · {{.Host}}</title>
 <meta name="description" content="Page views for your own sites: one script tag, no cookies, and a desk of numbers for each site. For {{.Token}} holders.">
 <meta name="theme-color" content="#dddddd">
-<style>{{chrome}}
-.window { max-width: 560px; }
-.body { padding: 12px 12px 0; }
-h1 { margin: 0 0 8px; font-size: 12px; line-height: 16px; }
-h1 small { display: block; font-size: 12px; font-weight: normal; }
-p { margin: 0 0 8px; line-height: 16px; }
-.fine { color: #555; }
-code { font: 11px/16px Monaco, "Courier New", monospace; }
-button.btn { font-family: inherit; cursor: default; margin: 0; }
-.btn:disabled { color: #777; border-color: #888; box-shadow: none; }
-.btn.default { outline: 2px solid #262626; outline-offset: 1px; border-radius: 4px; }
-.statusbar > :last-child:not(:first-child) { margin-left: auto; }
-.statusbar { min-height: 22px; }
-/* a row of buttons: at the lower right, 12px apart, the default last */
-.buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px 12px; margin: 12px 0; min-height: 20px; }
-.buttons form { display: contents; }
-.buttons .say { flex: 1 1 12em; min-width: 0; min-height: 16px; line-height: 16px; color: #555; }
-/* the sign-in row: its line may run to two on a phone, and holds the
-   wallets' buttons when there are several — the room is there from the
-   start, so the button never moves */
-#welcome .buttons { align-items: flex-end; }
-#welcome .say { display: flex; flex-wrap: wrap; align-items: flex-end; align-content: flex-end; gap: 6px 12px; min-height: 32px; }
-#welcome .wbtn { display: inline-flex; align-items: center; gap: 5px; }
-#welcome .wbtn img { width: 14px; height: 14px; display: block; flex: none; }
-/* leave room for two 20px wallet buttons when the choices wrap */
-@media (max-width: 479px) { #welcome .say { min-height: 46px; } }
-/* the tiers, and an account's facts: a sunken white list of 18px rows */
-table { width: 100%; border-collapse: collapse; margin: 0 0 12px; background: #fff; border: 1px solid #262626;
-  box-shadow: -1px -1px 0 #999, 1px 1px 0 #fff; }
-th, td { height: 18px; padding: 1px 6px; text-align: right; font-size: 12px; line-height: 16px; white-space: nowrap; }
-th { font-weight: bold; background: #ddd; border-bottom: 1px solid #262626; }
-th:first-child, td:first-child { text-align: left; }
-tr.on td { background: #333399; color: #fff; }
-dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0 0 12px; line-height: 16px; }
-dt { font-weight: bold; text-align: right; }
-dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
-/* the month's views: a bar in a sunken frame, its fill a box of its own */
-.meter { display: inline-block; vertical-align: -2px; width: 120px; height: 12px; margin-right: 6px; background: #fff;
-  border: 1px solid #262626; box-shadow: -1px -1px 0 #999, 1px 1px 0 #fff; }
-.meter i { display: block; height: 10px; background: #666699; }
-.notice { padding: 6px 8px; background: #ffffcc; border: 1px solid #262626; }
-.flash { min-height: 16px; }
-.flash.fault { color: #7a1010; }
-/* a text field: white, sunken, 20px */
-.field { display: block; box-sizing: border-box; width: 100%; height: 20px; margin: 0; padding: 2px 5px; background: #fff; color: #262626;
-  border: 1px solid #262626; border-radius: 0; box-shadow: -1px -1px 0 #999, 1px 1px 0 #fff;
-  font: 12px/14px "Charcoal", "Chicago", "Geneva", "Lucida Grande", "Lucida Sans", Verdana, sans-serif; -webkit-appearance: none; appearance: none; }
-.field:focus { outline: 2px solid #9999fe; outline-offset: 0; }
-.field:disabled { background: #ddd; color: #777; }
-.field.snip { font: 11px/14px Monaco, "Courier New", monospace; }
-.site { padding: 0 0 4px; margin: 0 0 12px; border-bottom: 1px solid #bbb; }
-.site .sline { display: flex; align-items: baseline; gap: 12px; margin: 0 0 6px; line-height: 16px; }
-.site .name { font-weight: bold; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.site .st { margin-left: auto; color: #555; white-space: nowrap; }
-.add { display: flex; gap: 12px; align-items: center; margin: 0 0 8px; }
-.add .field { flex: 1; min-width: 0; }
-@media (pointer: coarse) { .field { font-size: 16px; height: 24px; } .field.snip { font-size: 16px; } }
-/* the link to the badge, on the page's last status line; on a phone the
-   mint fills that line, and the link stays off it rather than break it */
-@media (max-width: 419px) { .badgelink { display: none; } }
-</style>
+<style>{{chrome}}{{template "style"}}</style>
 </head>
 <body>
 {{if .Signed}}
@@ -110,6 +50,7 @@ dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
           <a class="btn" href="/?remove={{.ID}}#s-{{.ID}}">Remove…</a>
           <button class="btn copy" type="button">Copy Snippet</button>
           {{if not .Counting}}<form method="post" action="/v1/sites/{{.ID}}/pick"><button class="btn">Count This One</button></form>{{end}}
+          <a class="btn" href="/sites/{{.ID}}/settings">Settings…</a>
           <a class="btn" href="/sites/{{.ID}}">Open</a>
         </div>{{end}}
       </div>{{else}}<p>No sites yet. Add one, paste its snippet into the head of its pages, and its desk fills as readers come.</p>{{end}}
@@ -225,6 +166,141 @@ dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 </script>
 </body>
 </html>{{end}}
+
+{{/* A site's settings: for now the setup check, a lamp that turns green
+     once the snippet reports a view from the site's own pages. While it
+     waits the page asks again every few seconds, and only the lamp and
+     its line change: the line has the room of its longest wording. */}}
+{{define "settings"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{{.Domain}} Settings · {{.Host}}</title>
+<meta name="theme-color" content="#dddddd">
+<style>{{chrome}}{{template "style"}}
+h2 { margin: 0 0 8px; font-size: 12px; line-height: 16px; }
+/* the check: a 32px lamp and its line beside it, as an alert sets its icon */
+.setup { display: flex; align-items: flex-start; gap: 12px; margin: 0 0 12px; }
+.lamp { display: block; flex: none; width: 32px; height: 32px; }
+.lamp .mark { display: none; }
+.setup.ok .lamp .face { fill: #1f9e33; }
+.setup.ok .lamp .shade { fill: #0f6b20; }
+.setup.ok .lamp .mark { display: inline; }
+.setup p { flex: 1; min-width: 0; min-height: 32px; margin: 0; overflow-wrap: anywhere; }
+@media (max-width: 479px) { .setup p { min-height: 48px; } }
+</style>
+</head>
+<body>
+<div class="window" id="settings">
+  <div class="titlebar"><a class="tbox" href="/" title="Sites" aria-label="Sites"></a><span class="stripe"></span><span class="title">{{.Domain}} Settings</span><span class="stripe"></span></div>
+  <div class="frame">
+    <div class="body">
+      <h2>Setup</h2>
+      <div class="setup{{if .Setup.OK}} ok{{end}}" id="setup" data-src="/v1/sites/{{.ID}}/setup">
+        <svg class="lamp" width="32" height="32" viewBox="0 0 32 32" shape-rendering="crispEdges" aria-hidden="true"><path class="face" fill="#eee" d="M14 1h4v1H14zM10 2h12v1H10zM8 3h16v1H8zM7 4h18v1H7zM6 5h20v1H6zM5 6h22v1H5zM4 7h24v1H4zM3 8h25v1H3zM3 9h25v1H3zM2 10h27v1H2zM2 11h27v1H2zM2 12h27v1H2zM2 13h27v1H2zM1 14h29v1H1zM1 15h29v1H1zM1 16h29v1H1zM1 17h28v1H1zM2 18h27v1H2zM2 19h27v1H2zM2 20h27v1H2zM2 21h26v1H2zM3 22h25v1H3zM3 23h24v1H3zM4 24h22v1H4zM5 25h20v1H5zM6 26h18v1H6zM7 27h16v1H7zM10 28h11v1H10zM14 29h3v1H14z"/><path class="shade" fill="#aaa" d="M28 8h1v1H28zM28 9h1v1H28zM29 10h1v1H29zM29 11h1v1H29zM29 12h1v1H29zM29 13h1v1H29zM30 14h1v1H30zM30 15h1v1H30zM30 16h1v1H30zM29 17h2v1H29zM29 18h1v1H29zM29 19h1v1H29zM29 20h1v1H29zM28 21h2v1H28zM28 22h1v1H28zM27 23h2v1H27zM26 24h2v1H26zM25 25h2v1H25zM24 26h2v1H24zM23 27h2v1H23zM8 28h2v1H8zM21 28h3v1H21zM10 29h4v1H10zM17 29h5v1H17zM14 30h4v1H14z"/><path class="mark" fill="#fff" d="M23 10h3v1H23zM21 11h4v1H21zM20 12h4v1H20zM19 13h4v1H19zM7 14h2v1H7zM18 14h4v1H18zM7 15h4v1H7zM17 15h4v1H17zM8 16h4v1H8zM16 16h4v1H16zM9 17h4v1H9zM15 17h4v1H15zM10 18h8v1H10zM11 19h6v1H11zM12 20h4v1H12zM13 21h2v1H13z"/><path fill="#000" d="M14 0h4v1H14zM10 1h4v1H10zM18 1h4v1H18zM8 2h2v1H8zM22 2h2v1H22zM7 3h1v1H7zM24 3h1v1H24zM5 4h2v1H5zM25 4h2v1H25zM4 5h2v1H4zM26 5h2v1H26zM4 6h1v1H4zM27 6h1v1H27zM3 7h1v1H3zM28 7h1v1H28zM2 8h1v1H2zM29 8h1v1H29zM2 9h1v1H2zM29 9h1v1H29zM1 10h1v1H1zM30 10h1v1H30zM1 11h1v1H1zM30 11h1v1H30zM1 12h1v1H1zM30 12h1v1H30zM1 13h1v1H1zM30 13h1v1H30zM0 14h1v1H0zM31 14h1v1H31zM0 15h1v1H0zM31 15h1v1H31zM0 16h1v1H0zM31 16h1v1H31zM0 17h1v1H0zM31 17h1v1H31zM1 18h1v1H1zM30 18h1v1H30zM1 19h1v1H1zM30 19h1v1H30zM1 20h1v1H1zM30 20h1v1H30zM1 21h1v1H1zM30 21h1v1H30zM2 22h1v1H2zM29 22h1v1H29zM2 23h1v1H2zM29 23h1v1H29zM3 24h1v1H3zM28 24h1v1H28zM4 25h1v1H4zM27 25h1v1H27zM4 26h2v1H4zM26 26h2v1H26zM5 27h2v1H5zM25 27h2v1H25zM7 28h1v1H7zM24 28h1v1H24zM8 29h2v1H8zM22 29h2v1H22zM10 30h4v1H10zM18 30h4v1H18zM14 31h4v1H14z"/></svg>
+        <p id="setup-line" role="status">{{.Setup.Line}}</p>
+      </div>
+      {{with .Note}}<p class="notice">{{.}}</p>{{end}}
+      <input class="field snip" id="snip" readonly value="{{.Snippet}}" aria-label="The snippet for {{.Domain}}">
+      <div class="buttons">
+        <button class="btn" id="copy" type="button">Copy Snippet</button>
+        <a class="btn" href="/sites/{{.ID}}">Open Desk</a>
+      </div>
+    </div>
+    <div class="statusbar"><span>{{if .Counting}}Counting{{else}}Resting{{end}}</span><span>Days begin in {{.TZ}}</span></div>
+  </div>
+</div>
+<script>
+(() => {
+  const f = document.getElementById("snip");
+  f.addEventListener("focus", () => f.select());
+  document.getElementById("copy").addEventListener("click", () => {
+    f.select();
+    if (navigator.clipboard) navigator.clipboard.writeText(f.value).catch(() => {});
+  });
+  // until the snippet reports, ask again: a page opened on the site in
+  // another tab turns the lamp green here
+  const box = document.getElementById("setup"), line = document.getElementById("setup-line");
+  if (box.classList.contains("ok")) return;
+  const t = setInterval(async () => {
+    if (document.hidden) return;
+    try {
+      const v = await (await fetch(box.dataset.src, { cache: "no-store" })).json();
+      if (v.line) line.textContent = v.line;
+      if (v.ok) { box.classList.add("ok"); clearInterval(t); }
+    } catch (e) {}
+  }, 3000);
+})();
+</script>
+</body>
+</html>{{end}}
+
+{{/* The pages' own rules over the chrome, shared by every page here. */}}
+{{define "style"}}
+.window { max-width: 560px; }
+.body { padding: 12px 12px 0; }
+h1 { margin: 0 0 8px; font-size: 12px; line-height: 16px; }
+h1 small { display: block; font-size: 12px; font-weight: normal; }
+p { margin: 0 0 8px; line-height: 16px; }
+.fine { color: #555; }
+code { font: 11px/16px Monaco, "Courier New", monospace; }
+button.btn { font-family: inherit; cursor: default; margin: 0; }
+.btn:disabled { color: #777; border-color: #888; box-shadow: none; }
+.btn.default { outline: 2px solid #262626; outline-offset: 1px; border-radius: 4px; }
+.statusbar > :last-child:not(:first-child) { margin-left: auto; }
+.statusbar { min-height: 22px; }
+/* a row of buttons: at the lower right, 12px apart, the default last */
+.buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px 12px; margin: 12px 0; min-height: 20px; }
+.buttons form { display: contents; }
+.buttons .say { flex: 1 1 12em; min-width: 0; min-height: 16px; line-height: 16px; color: #555; }
+/* the sign-in row: its line may run to two on a phone, and holds the
+   wallets' buttons when there are several — the room is there from the
+   start, so the button never moves */
+#welcome .buttons { align-items: flex-end; }
+#welcome .say { display: flex; flex-wrap: wrap; align-items: flex-end; align-content: flex-end; gap: 6px 12px; min-height: 32px; }
+#welcome .wbtn { display: inline-flex; align-items: center; gap: 5px; }
+#welcome .wbtn img { width: 14px; height: 14px; display: block; flex: none; }
+/* leave room for two 20px wallet buttons when the choices wrap */
+@media (max-width: 479px) { #welcome .say { min-height: 46px; } }
+/* the tiers, and an account's facts: a sunken white list of 18px rows */
+table { width: 100%; border-collapse: collapse; margin: 0 0 12px; background: #fff; border: 1px solid #262626;
+  box-shadow: -1px -1px 0 #999, 1px 1px 0 #fff; }
+th, td { height: 18px; padding: 1px 6px; text-align: right; font-size: 12px; line-height: 16px; white-space: nowrap; }
+th { font-weight: bold; background: #ddd; border-bottom: 1px solid #262626; }
+th:first-child, td:first-child { text-align: left; }
+tr.on td { background: #333399; color: #fff; }
+dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0 0 12px; line-height: 16px; }
+dt { font-weight: bold; text-align: right; }
+dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+/* the month's views: a bar in a sunken frame, its fill a box of its own */
+.meter { display: inline-block; vertical-align: -2px; width: 120px; height: 12px; margin-right: 6px; background: #fff;
+  border: 1px solid #262626; box-shadow: -1px -1px 0 #999, 1px 1px 0 #fff; }
+.meter i { display: block; height: 10px; background: #666699; }
+.notice { padding: 6px 8px; background: #ffffcc; border: 1px solid #262626; }
+.flash { min-height: 16px; }
+.flash.fault { color: #7a1010; }
+/* a text field: white, sunken, 20px */
+.field { display: block; box-sizing: border-box; width: 100%; height: 20px; margin: 0; padding: 2px 5px; background: #fff; color: #262626;
+  border: 1px solid #262626; border-radius: 0; box-shadow: -1px -1px 0 #999, 1px 1px 0 #fff;
+  font: 12px/14px "Charcoal", "Chicago", "Geneva", "Lucida Grande", "Lucida Sans", Verdana, sans-serif; -webkit-appearance: none; appearance: none; }
+.field:focus { outline: 2px solid #9999fe; outline-offset: 0; }
+.field:disabled { background: #ddd; color: #777; }
+.field.snip { font: 11px/14px Monaco, "Courier New", monospace; }
+.site { padding: 0 0 4px; margin: 0 0 12px; border-bottom: 1px solid #bbb; }
+.site .sline { display: flex; align-items: baseline; gap: 12px; margin: 0 0 6px; line-height: 16px; }
+.site .name { font-weight: bold; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.site .st { margin-left: auto; color: #555; white-space: nowrap; }
+.add { display: flex; gap: 12px; align-items: center; margin: 0 0 8px; }
+.add .field { flex: 1; min-width: 0; }
+@media (pointer: coarse) { .field { font-size: 16px; height: 24px; } .field.snip { font-size: 16px; } }
+/* the link to the badge, on the page's last status line; on a phone the
+   mint fills that line, and the link stays off it rather than break it */
+@media (max-width: 419px) { .badgelink { display: none; } }
+/* a site's row of buttons on a phone: Copy Snippet stays off it rather
+   than break it in two — the same button is on the site's settings */
+@media (max-width: 479px) { .site .copy { display: none; } }
+{{end}}
 
 {{define "tiers"}}<div class="window" id="tiers">
   <div class="titlebar"><span class="stripe"></span><span class="title">Tiers</span><span class="stripe"></span></div>

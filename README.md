@@ -137,6 +137,17 @@ the same 202 whatever became of it; the `X-Exe-Stats` response header
 says what did (`counted`, `not this site's page`, `month full`, …), for
 an owner checking a snippet in the browser's network panel.
 
+**A site's settings** (`/sites/{id}/settings`, its Settings… button)
+begin with the setup check: a lamp that turns green once the snippet
+reports a view from the site's own pages — counted or not, since a
+resting site's snippet is in place too. Until then its line says the
+page waits, or why a view was refused (a page on another host, or a
+beacon sent from another origin), and the page asks
+`/v1/sites/{id}/setup` again every few seconds, so a page of the site
+opened in another tab turns it green. When the snippet last reported is
+kept in `app.db`, to the minute; a refusal only in memory. A site that
+counted before the check is read once from its own hits.
+
 **Signing in** offers each detected wallet by name and icon when more
 than one is installed, as the hub does. It is one signature over a message
 the server issued for that address, never a transaction; the address is

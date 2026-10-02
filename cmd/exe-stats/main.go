@@ -164,7 +164,7 @@ func newApp(cfg Config, appDB *sql.DB, rpc Balancer) (*App, error) {
 		return nil, err
 	}
 	for _, s := range all {
-		a.sites[s.ID] = &siteEntry{site: s}
+		a.sites[s.ID] = &siteEntry{site: s, saved: s.Seen, backfilled: s.Seen != 0}
 	}
 	return a, nil
 }
@@ -186,6 +186,8 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /v1/sites/{id}/pick", a.handlePickSite)
 	mux.HandleFunc("GET /sites/{id}", a.handleDesk)
 	mux.HandleFunc("GET /v1/sites/{id}/stats", a.handleDesk)
+	mux.HandleFunc("GET /sites/{id}/settings", a.handleSettings)
+	mux.HandleFunc("GET /v1/sites/{id}/setup", a.handleSetup)
 	mux.HandleFunc("GET /robots.txt", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		fmt.Fprint(w, "User-agent: *\nDisallow: /sites/\nDisallow: /v1/\nDisallow: /e\n")
@@ -194,7 +196,8 @@ func (a *App) routes() http.Handler {
 }
 
 // run is the background work: the daily balance checks, the month's
-// counts written down, and the limiter kept small.
+// counts and the snippets' reports written down, and the limiter kept
+// small.
 func (a *App) run(ctx context.Context) {
 	flush := time.NewTicker(5 * time.Second)
 	check := time.NewTicker(time.Minute)
@@ -206,6 +209,7 @@ func (a *App) run(ctx context.Context) {
 			return
 		case <-flush.C:
 			a.flushUsage()
+			a.flushSeen(false)
 		case now := <-check.C:
 			a.checkDue(ctx, now)
 			a.limit.prune(now)
@@ -217,6 +221,7 @@ func (a *App) run(ctx context.Context) {
 // close writes what is held and closes every site's file.
 func (a *App) close() {
 	a.flushUsage()
+	a.flushSeen(true)
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	for _, e := range a.sites {

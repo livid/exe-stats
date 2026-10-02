@@ -34,6 +34,10 @@ type siteEntry struct {
 	site Site
 	st   *stats.Stats
 	db   *sql.DB
+
+	saved      int64   // the site.Seen the store has
+	backfilled bool    // site.Seen has been read from the site's own hits
+	refused    refusal // the last beacon refused for this site, since the server started
 }
 
 func (e *siteEntry) close() {
@@ -219,13 +223,22 @@ func (a *App) collect(r *http.Request) string {
 	// the page must be the site's own, and a browser's beacon comes
 	// from that page: a hit for somebody else's site id is refused here
 	if hostOf(page.Host) != e.site.Domain {
+		e.refused = refusal{At: now.UnixMilli(), Why: beaconForeign, From: hostOf(page.Host)}
 		return beaconForeign
 	}
 	if o := r.Header.Get("Origin"); o != "" {
 		if ou, err := url.Parse(o); err != nil || hostOf(ou.Host) != e.site.Domain {
+			from := ""
+			if err == nil {
+				from = hostOf(ou.Host)
+			}
+			e.refused = refusal{At: now.UnixMilli(), Why: beaconOrigin, From: from}
 			return beaconOrigin
 		}
 	}
+	// a view from the site's own page: the snippet is in place, whether
+	// or not the view is counted
+	e.site.Seen = now.UnixMilli()
 	ac, err := a.acctOf(e.site.Addr, now)
 	if err != nil {
 		a.log("collect: %v", err)

@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -41,6 +42,7 @@ CREATE TABLE IF NOT EXISTS sites (
   tz      TEXT NOT NULL DEFAULT 'UTC',
   picked  INTEGER NOT NULL DEFAULT 0,      -- ms; the owner chose it to count when the tier holds fewer
   created INTEGER NOT NULL,
+  seen    INTEGER NOT NULL DEFAULT 0,      -- ms; the last view from the site's own pages: the snippet is in place
   UNIQUE (addr, domain)
 );
 CREATE INDEX IF NOT EXISTS sites_addr ON sites(addr);
@@ -53,6 +55,10 @@ CREATE TABLE IF NOT EXISTS usage (
   PRIMARY KEY (addr, month)
 );`)
 	if err != nil {
+		return nil, err
+	}
+	// a file made before the setup check gains its column
+	if _, err := db.Exec(`ALTER TABLE sites ADD COLUMN seen INTEGER NOT NULL DEFAULT 0`); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 		return nil, err
 	}
 	return &Store{db}, nil
@@ -136,9 +142,11 @@ func (s *Store) sweepSessions(now time.Time) {
 // ---- sites ----
 
 type Site struct {
-	ID, Addr, Domain, TZ string
-	Picked, Created      int64
+	ID, Addr, Domain, TZ  string
+	Picked, Created, Seen int64
 }
+
+const siteCols = `id, addr, domain, tz, picked, created, seen`
 
 var errSiteExists = errors.New("that site is already here")
 
@@ -161,7 +169,7 @@ func scanSites(rows *sql.Rows, err error) ([]Site, error) {
 	var out []Site
 	for rows.Next() {
 		var st Site
-		if err := rows.Scan(&st.ID, &st.Addr, &st.Domain, &st.TZ, &st.Picked, &st.Created); err != nil {
+		if err := rows.Scan(&st.ID, &st.Addr, &st.Domain, &st.TZ, &st.Picked, &st.Created, &st.Seen); err != nil {
 			return nil, err
 		}
 		out = append(out, st)
@@ -173,16 +181,22 @@ func scanSites(rows *sql.Rows, err error) ([]Site, error) {
 // owner picked first, latest pick first, then the oldest. A tier that
 // holds fewer than there are counts the first of them.
 func (s *Store) sitesOf(addr string) ([]Site, error) {
-	return scanSites(s.db.Query(`SELECT id, addr, domain, tz, picked, created FROM sites WHERE addr=?
+	return scanSites(s.db.Query(`SELECT `+siteCols+` FROM sites WHERE addr=?
 		ORDER BY picked DESC, created, rowid`, addr))
 }
 
 func (s *Store) allSites() ([]Site, error) {
-	return scanSites(s.db.Query(`SELECT id, addr, domain, tz, picked, created FROM sites ORDER BY addr, picked DESC, created, rowid`))
+	return scanSites(s.db.Query(`SELECT ` + siteCols + ` FROM sites ORDER BY addr, picked DESC, created, rowid`))
 }
 
 func (s *Store) pickSite(addr, id string, now time.Time) error {
 	_, err := s.db.Exec(`UPDATE sites SET picked=? WHERE id=? AND addr=?`, now.UnixMilli(), id, addr)
+	return err
+}
+
+// saveSeen writes down when a site's snippet last reported a view.
+func (s *Store) saveSeen(id string, ms int64) error {
+	_, err := s.db.Exec(`UPDATE sites SET seen=? WHERE id=?`, ms, id)
 	return err
 }
 

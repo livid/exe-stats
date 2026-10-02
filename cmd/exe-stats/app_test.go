@@ -318,6 +318,96 @@ func TestSitesAndBeacons(t *testing.T) {
 	}
 }
 
+// The setup check: a site waits for its first view, says why a view
+// was refused, turns OK on one from its own pages, and keeps that over a
+// restart; a site that counted before the check reads it from its hits.
+func TestSetupCheck(t *testing.T) {
+	h := newHarness(t)
+	w := newWallet()
+	h.bal.set(w.addr, 10000)
+	h.signIn(w)
+	h.form(w, "/v1/sites", url.Values{"domain": {"shop.example"}})
+	shop := h.siteID(w, "shop.example")
+	if home := h.do(w, "GET", "/", "", nil).Body.String(); !strings.Contains(home, `href="/sites/`+shop+`/settings"`) {
+		t.Fatal("the home page does not link the site's settings")
+	}
+	check := func() setupView {
+		t.Helper()
+		rec := h.do(w, "GET", "/v1/sites/"+shop+"/setup", "", nil)
+		var v setupView
+		if rec.Code != 200 || json.Unmarshal(rec.Body.Bytes(), &v) != nil {
+			t.Fatalf("setup = %d %s", rec.Code, rec.Body)
+		}
+		return v
+	}
+	settings := func() string {
+		t.Helper()
+		rec := h.do(w, "GET", "/sites/"+shop+"/settings", "", nil)
+		if rec.Code != 200 {
+			t.Fatalf("settings = %d", rec.Code)
+		}
+		return rec.Body.String()
+	}
+
+	if v := check(); v.OK || !strings.HasPrefix(v.Line, "Waiting for the first page view.") {
+		t.Fatalf("before any view: %+v", v)
+	}
+	if page := settings(); !strings.Contains(page, `<div class="setup" id="setup"`) || !strings.Contains(page, "Waiting for the first page view.") ||
+		!strings.Contains(page, `data-site=&#34;`+shop+`&#34;`) || !strings.Contains(page, "Days begin in UTC") {
+		t.Fatalf("the page before any view:\n%s", page)
+	}
+	// a page on another host carrying this site's snippet
+	h.beacon(shop, "https://staging.example/tea", "", "https://staging.example")
+	if v := check(); v.OK || v.Line != "A view came from staging.example just now and was not counted: this site is shop.example." {
+		t.Fatalf("a foreign view: %+v", v)
+	}
+	h.beacon(shop, "https://shop.example/", "", "https://evil.example")
+	if v := check(); v.OK || v.Line != "A view of shop.example was sent from evil.example just now, and was not counted." {
+		t.Fatalf("another origin: %+v", v)
+	}
+	// one from its own page: the snippet works, and the refusal stays a note
+	if got := h.beacon(shop, "https://www.shop.example/", "", "https://www.shop.example"); got != beaconCounted {
+		t.Fatalf("own page: %q", got)
+	}
+	if v := check(); !v.OK || v.Line != "The snippet works: the last page view came just now." {
+		t.Fatalf("after a view: %+v", v)
+	}
+	if page := settings(); !strings.Contains(page, `<div class="setup ok" id="setup"`) ||
+		!strings.Contains(page, `<p class="notice">A view of shop.example was sent from evil.example just now, and was not counted.</p>`) {
+		t.Fatalf("the page after a view:\n%s", page)
+	}
+
+	// another wallet, or none, gets nothing
+	poor := newWallet()
+	h.signIn(poor)
+	for _, p := range []string{"/sites/" + shop + "/settings", "/v1/sites/" + shop + "/setup"} {
+		if rec := h.do(poor, "GET", p, "", nil); rec.Code != 404 {
+			t.Fatalf("a stranger's %s = %d", p, rec.Code)
+		}
+		if rec := h.do(nil, "GET", p, "", nil); rec.Code != http.StatusSeeOther {
+			t.Fatalf("signed out %s = %d", p, rec.Code)
+		}
+	}
+
+	// written down: the store has it after a flush
+	h.app.flushSeen(false)
+	sites, _ := h.app.store.sitesOf(w.addr)
+	if len(sites) != 1 || sites[0].Seen == 0 {
+		t.Fatalf("stored = %+v", sites)
+	}
+
+	// a site that counted before the server kept this: read from its hits
+	time.Sleep(1200 * time.Millisecond) // the site's writer lands its batch once a second
+	h.app.store.saveSeen(shop, 0)
+	h.app.mu.Lock()
+	e := h.app.sites[shop]
+	e.site.Seen, e.saved, e.backfilled, e.refused = 0, 0, false, refusal{}
+	h.app.mu.Unlock()
+	if v := check(); !v.OK {
+		t.Fatalf("from the hits: %+v", v)
+	}
+}
+
 // The grace table against the server: a short balance keeps counting,
 // refuses new sites, and after the grace the lower tier rests the sites
 // it does not hold; no tier pauses everything and deletes nothing.
