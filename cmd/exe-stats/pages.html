@@ -33,6 +33,10 @@ button.btn { font-family: inherit; cursor: default; margin: 0; }
    start, so the button never moves */
 #welcome .buttons { align-items: flex-end; }
 #welcome .say { display: flex; flex-wrap: wrap; align-items: flex-end; align-content: flex-end; gap: 6px 12px; min-height: 32px; }
+#welcome .wbtn { display: inline-flex; align-items: center; gap: 5px; }
+#welcome .wbtn img { width: 14px; height: 14px; display: block; flex: none; }
+/* leave room for two 20px wallet buttons when the choices wrap */
+@media (max-width: 479px) { #welcome .say { min-height: 46px; } }
 /* the tiers, and an account's facts: a sunken white list of 18px rows */
 table { width: 100%; border-collapse: collapse; margin: 0 0 12px; background: #fff; border: 1px solid #262626;
   box-shadow: -1px -1px 0 #999, 1px 1px 0 #fff; }
@@ -210,7 +214,9 @@ dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
     say.textContent = "";
     for (const w of ws) {
       const b = document.createElement("button");
-      b.type = "button"; b.className = "btn"; b.textContent = w.name;
+      b.type = "button"; b.className = "btn wbtn";
+      if (w.icon) { const i = document.createElement("img"); i.src = w.icon; i.alt = ""; b.append(i); }
+      b.append(w.name);
       b.addEventListener("click", () => signIn(w));
       say.appendChild(b);
     }

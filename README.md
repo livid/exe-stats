@@ -137,10 +137,11 @@ the same 202 whatever became of it; the `X-Exe-Stats` response header
 says what did (`counted`, `not this site's page`, `month full`, …), for
 an owner checking a snippet in the browser's network panel.
 
-**Signing in** is one signature over a message the server issued for
-that address, never a transaction; the address is the account. A session
-is an `HttpOnly`, `SameSite=Lax` cookie whose hash, not its value, is
-stored.
+**Signing in** offers each detected wallet by name and icon when more
+than one is installed, as the hub does. It is one signature over a message
+the server issued for that address, never a transaction; the address is
+the account. A session is an `HttpOnly`, `SameSite=Lax` cookie whose hash,
+not its value, is stored.
 
 **Tiers** follow what the wallet holds of `mint`, read over RPC
 (`getTokenAccountsByOwner`): how many sites count, and how many page
@@ -178,6 +179,13 @@ collect address. `cmd/exe-stats/e2e/e2e.js` drives the whole flow in
 headless Chromium against a scratch server — a mock wallet signing with
 a real key, a fake RPC, and a site carrying the snippet; its head says
 how to run it.
+
+The 2026-10-01 wallet-chooser build for Linux ARM64 (18,769,184 bytes)
+is pinned recursively in Kubo, CID `QmQWRx2r5iy4Y7SDYwV8qWxU5Mub5eAvbLQGofBLiqXnm2`.
+A [fresh download from the build machine's local gateway](http://127.0.0.1:8081/ipfs/QmQWRx2r5iy4Y7SDYwV8qWxU5Mub5eAvbLQGofBLiqXnm2)
+was verified against SHA-256
+`ec1d45195d90578c24b79b11b90446e34d8da52c395d345232e46d5c3ee9a18c`.
+The binary stays outside Git.
 
 Not built yet: a public link to a desk, more than one wallet on an
 account, a note by email or push when a grace begins, export, a privacy
