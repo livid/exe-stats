@@ -704,3 +704,43 @@ func TestBase58(t *testing.T) {
 		t.Fatal("letters outside the alphabet decoded")
 	}
 }
+
+// A tier added to the config is an account's at once when the balance
+// last read covers it — the next check's word, without waiting for it —
+// and a balance under its tier is not lowered before a check.
+func TestTierAddedApplies(t *testing.T) {
+	h := newHarness(t)
+	now := time.Now()
+	for _, c := range []struct {
+		addr       string
+		tier       int
+		bal        int64
+		want       int
+		checkedOne bool
+	}{
+		{"rich", 2, 2000000 * tok, 3, true},      // holds a million: the new Top
+		{"short", 2, 20000 * tok, 2, true},       // under High: a check, and its grace, decide
+		{"unread", -1, 2000000 * tok, -1, false}, // never checked: nothing to go by
+	} {
+		rec, err := h.app.store.account(c.addr, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rec.Tier, rec.Balance = c.tier, c.bal
+		if c.checkedOne {
+			rec.Checked = now.UnixMilli()
+		}
+		if err := h.app.store.saveAccount(rec); err != nil {
+			t.Fatal(err)
+		}
+		h.app.mu.Lock()
+		ac, err := h.app.acctOf(c.addr, now)
+		h.app.mu.Unlock()
+		if err != nil || ac.Tier != c.want {
+			t.Fatalf("%s: tier %d, want %d (%v)", c.addr, ac.Tier, c.want, err)
+		}
+		if again, _ := h.app.store.account(c.addr, now); again.Tier != c.want {
+			t.Fatalf("%s: the store has tier %d", c.addr, again.Tier)
+		}
+	}
+}

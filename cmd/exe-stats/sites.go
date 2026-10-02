@@ -62,6 +62,16 @@ func (a *App) acctOf(addr string, now time.Time) (*acct, error) {
 	if err != nil {
 		return nil, err
 	}
+	// the tiers as they stand now, over the balance last read: one the
+	// balance covers above the account's — a tier added since — is its
+	// at once, as the next check would make it; a lower one waits for a
+	// check, and its grace
+	if t := a.rules.tierOf(rec.Balance); rec.Checked > 0 && t > rec.Tier {
+		rec.Tier, rec.ShortSince = t, 0
+		if err := a.store.saveAccount(rec); err != nil {
+			return nil, err
+		}
+	}
 	sites, err := a.store.sitesOf(addr)
 	if err != nil {
 		return nil, err
