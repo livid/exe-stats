@@ -156,7 +156,7 @@ const pix = (() => {
 // the hero's wheels; the readers a word brings arrive as the hero's do:
 // orange dots fall into the hour under way, two steps of them to a power
 // of ten (a view is one dot, 2-4 two, 5-9 three, 10-49 four, eight at
-// most), and as each lands its cap splashes, the bar steps up, the wheels
+// most), and as each lands its cap flashes, the bar steps up, the wheels
 // roll on to it and the lamp lights. A new hour, a day drawn anew, or a
 // reader who asks for less motion is drawn as it is.
 (() => {
@@ -242,8 +242,8 @@ const pix = (() => {
       bar.style.setProperty("--t", L.h + "px");
       count(d.row, L.v);
       label(d.box, L.s, L.v);
-      // the landing: the cap splashes as the lamp does, white under a peach
-      // ring, for a tenth of a second; and the lamp lights
+      // the landing: the cap flashes a brighter orange for a tenth of a
+      // second, and the lamp lights
       bar.classList.add("hit");
       clearTimeout(bar.hit);
       bar.hit = setTimeout(() => bar.classList.remove("hit"), 100);
@@ -879,9 +879,9 @@ dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .site .bars i::before { --h: var(--y, 0px); background: #ebebff; border-color: #ccccff; }
 .site .bars i::after { --h: var(--t, 0px); background: #9999ff; border-color: #333399; }
 .site .bars i.now::after { background: #ffcc99; border-color: #ff6600; }
-/* a dot landing: the cap white under a row of peach, as the lit lamp's
-   highlight sits in its ring, for a tenth of a second */
-.site .bars i.now.hit::after { border-top-color: #fff; box-shadow: 0 -2px 0 #ffcc99; }
+/* a dot landing: the cap flashes a brighter orange for a tenth of a
+   second, between its own and the peach under it, never past the peach */
+.site .bars i.now.hit::after { border-top-color: #ff9933; }
 .site .bars .dot { position: absolute; left: 0; top: 0; width: 4px; height: 4px; background: #ff6600; pointer-events: none; }
 .add { display: flex; gap: 12px; align-items: center; margin: 0 0 8px; }
 .add .field { flex: 1; min-width: 0; }

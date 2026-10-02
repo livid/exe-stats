@@ -291,7 +291,14 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     await page.waitForFunction(() => !document.querySelector('.site .dot'), null, { timeout: 5000 }).catch(() => {});
     const fell = await page.evaluate(() => [window.__dots, document.querySelectorAll('.site .dot').length, window.__hits]);
     ok(fell[0] >= 2 && fell[0] <= 3 && fell[1] === 0, 'the three views fell into the hour as dots, by the log of each word\'s count, and every one has landed', fell);
-    ok(fell[2] >= 1 && await page.evaluate(() => !document.querySelector('.site .bars i.hit')), 'a dot landing splashes the cap, and the splash passes', fell);
+    ok(fell[2] >= 1 && await page.evaluate(() => !document.querySelector('.site .bars i.hit')), 'a dot landing flashes the cap, and the flash passes', fell);
+    const flash = await page.evaluate(() => {
+      const bar = document.querySelector('.site .bars i.now'), cap = () => getComputedStyle(bar, '::after').borderTopColor;
+      const rest = cap(); bar.classList.add('hit'); const lit = cap(); bar.classList.remove('hit');
+      return [rest, lit, getComputedStyle(bar, '::after').backgroundColor];
+    });
+    ok(flash[0] === 'rgb(255, 102, 0)' && flash[1] === 'rgb(255, 153, 51)' && flash[2] === 'rgb(255, 204, 153)',
+      "the flash is a brighter orange, short of the peach under it", flash);
 
     // ---- the Sites window draws the day: a bar an hour, the views in the hour still filling ----
     await page.reload();
