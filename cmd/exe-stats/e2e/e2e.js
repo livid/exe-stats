@@ -228,6 +228,8 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     ok(day.tv === '3 views today · 1 online' && Math.round(day.w) === 8 * day.n + 4 && Math.round(day.h) === 30, 'its views and who is on it in words, and the box is the whole day wide', day);
     ok(await page.locator('.site .bars').getAttribute('href') === `/sites/${siteId}` && await page.locator('.site .bars').evaluate(e => getComputedStyle(e).cursor) === 'pointer',
       'the day is a press to the desk, and the pointer says so');
+    const btnCursors = await page.locator('.site .buttons .btn').evaluateAll(bs => bs.map(b => getComputedStyle(b).cursor));
+    ok(btnCursors.length >= 3 && btnCursors.every(c => c === 'default'), "the row's buttons wear no hand", btnCursors);
     await Promise.all([page.waitForNavigation(), page.click('.site .bars')]);
     ok(page.url() === `${APP}/sites/${siteId}`, 'a press on the day opens the desk', page.url());
     await Promise.all([page.waitForNavigation(), page.goBack()]);
