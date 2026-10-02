@@ -140,6 +140,25 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
       await ctx.close();
     }
 
+    // ---- the narrowest phone, in Verdana's width (an iPhone's face here;
+    // headless Chromium's own fallback is narrower): the tiers fit their
+    // window, their units in the header and the mint shown by its ends ----
+    {
+      const { ctx, page } = await context(browser, [], { dpr: 2, phone: true, viewport: { width: 320, height: 640 } });
+      await page.goto(APP + '/');
+      await page.addStyleTag({ content: 'body, th, td, .statusbar { font-family: "DejaVu Sans" !important }' });
+      const out = await page.evaluate(() => {
+        const f = document.querySelector('#tiers .frame').getBoundingClientRect();
+        return [...document.querySelectorAll('#tiers .frame *')].filter(e => e.getBoundingClientRect().right > f.right - 1).map(e => e.tagName + '.' + e.className);
+      });
+      ok(out.length === 0 && await noScroll(page), '320px: the tiers stay inside their window', out);
+      ok(await page.locator('#tiers th').nth(1).innerText() === 'Hold\n$V2EX' && !(await page.locator('#tiers td').nth(1).innerText()).includes('$'),
+        '320px: the token is in the header, not in every row');
+      ok(/^\S{10}…\S{10}$/.test(await page.locator('#tiers code').innerText()), '320px: the mint shows its ends');
+      await shot(page, 'tiers-320');
+      await ctx.close();
+    }
+
     // ---- the hero holds still for a reader who asks for less motion ----
     {
       const { ctx, page } = await context(browser, [], { still: true });

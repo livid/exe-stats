@@ -642,6 +642,14 @@ th, td { height: 18px; padding: 1px 6px; text-align: right; font-size: 12px; lin
 th { font-weight: bold; background: #ddd; border-bottom: 1px solid #262626; }
 th:first-child, td:first-child { text-align: left; }
 tr.on td { background: #333399; color: #fff; }
+/* on a phone the units leave the cells for a second line of the
+   header, so the numbers stay whole and the table fits the window */
+th .hunit { display: none; }
+@media (max-width: 399px) {
+  th { vertical-align: bottom; }
+  th .hunit, th .hline { display: block; }
+  td .vunit { display: none; }
+}
 dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0 0 12px; line-height: 16px; }
 dt { font-weight: bold; text-align: right; }
 dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
@@ -682,8 +690,11 @@ dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .add .field { flex: 1; min-width: 0; }
 @media (pointer: coarse) { .field { font-size: 16px; height: 24px; } .field.snip { font-size: 16px; } }
 /* the link to the badge, on the page's last status line; on a phone the
-   mint fills that line, and the link stays off it rather than break it */
-@media (max-width: 419px) { .badgelink { display: none; } }
+   mint fills that line, and the link stays off it rather than break it.
+   Whole, the mint itself would run past a phone's window: there it shows
+   its ends, as the account shows a wallet */
+.mint.short { display: none; }
+@media (max-width: 419px) { .badgelink { display: none; } .mint { display: none; } .mint.short { display: inline; } }
 {{end}}
 
 {{define "tiers"}}<div class="window" id="tiers">
@@ -691,12 +702,12 @@ dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
   <div class="frame">
     <div class="body">
       <table>
-        <tr><th>Tier</th><th>Hold</th><th>Sites</th><th>Views a month</th></tr>
-        {{range .Tiers}}<tr{{if .On}} class="on"{{end}}><td>{{.Name}}</td><td>{{.Hold}} {{$.Token}}</td><td>{{.Sites}}</td><td>{{.Views}}</td></tr>
+        <tr><th>Tier</th><th>Hold<span class="hunit"> {{.Token}}</span></th><th>Sites</th><th>Views<span class="hline"> a month</span></th></tr>
+        {{range .Tiers}}<tr{{if .On}} class="on"{{end}}><td>{{.Name}}</td><td>{{.Hold}}<span class="vunit"> {{$.Token}}</span></td><td>{{.Sites}}</td><td>{{.Views}}</td></tr>
         {{end}}
       </table>
       <p class="fine">A balance that falls under its tier keeps counting for {{.GraceDays}} days. A first month over the cap is counted up to {{.OverFactor}} times the cap. Nothing counted is deleted for either.</p>
     </div>
-    <div class="statusbar"><span>Mint <code>{{.Mint}}</code></span><a class="badgelink" href="/badge/">Badge</a></div>
+    <div class="statusbar"><span>Mint <code title="{{.Mint}}"><span class="mint">{{.Mint}}</span><span class="mint short">{{.MintShort}}</span></code></span><a class="badgelink" href="/badge/">Badge</a></div>
   </div>
 </div>{{end}}

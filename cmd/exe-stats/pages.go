@@ -171,6 +171,7 @@ func viewWords(n int) string {
 
 type homeData struct {
 	Host, Token, Mint string
+	MintShort         string // the mint on a phone, its ends with … between
 	Tiers             []tierRow
 	Signed            bool
 	Addr, AddrShort   string
@@ -213,6 +214,16 @@ func short(n int64) string {
 	return commas(n)
 }
 
+// ends shortens s to its first and last n characters with … between,
+// as a wallet shows an address; a string that short already is kept.
+func ends(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= 2*n+1 {
+		return s
+	}
+	return string(r[:n]) + "…" + string(r[len(r)-n:])
+}
+
 func plural(n int, one, many string) string {
 	if n == 1 {
 		return "1 " + one
@@ -235,7 +246,7 @@ func (a *App) snippet(r *http.Request, id string) string {
 // account and its sites.
 func (a *App) handleHome(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
-	d := homeData{Host: a.host(r), Token: a.cfg.Token, Mint: a.cfg.Mint, GraceDays: a.cfg.GraceDays, OverFactor: a.cfg.OverFactor}
+	d := homeData{Host: a.host(r), Token: a.cfg.Token, Mint: a.cfg.Mint, MintShort: ends(a.cfg.Mint, 10), GraceDays: a.cfg.GraceDays, OverFactor: a.cfg.OverFactor}
 	q := r.URL.Query()
 	d.Note, d.Fault = notes[q.Get("m")], faults[q.Get("e")]
 	addr := a.signedIn(r)
