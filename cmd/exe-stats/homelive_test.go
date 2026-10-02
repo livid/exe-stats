@@ -64,7 +64,7 @@ func TestHomeLive(t *testing.T) {
 		return liveHome{}
 	}
 	first := next("the first")
-	if len(first.Sites) != 1 || first.Sites[0].ID != id || first.Sites[0].Today != "0 views today · 0 online" || len(first.Sites[0].Bars) < 23 || first.Used != "0" {
+	if len(first.Sites) != 1 || first.Sites[0].ID != id || first.Sites[0].Today != "0 views today · 0 online" || first.Sites[0].Views != 0 || len(first.Sites[0].Bars) < 23 || first.Used != "0" {
 		t.Fatalf("the first event: %+v", first)
 	}
 	if got := h.beacon(id, "https://shop.example/", "", "https://shop.example"); got != beaconCounted {
@@ -76,7 +76,7 @@ func TestHomeLive(t *testing.T) {
 	for after.Sites[0].Today != "1 view today · 1 online" {
 		after = next("the day with the view")
 	}
-	if after.Used != "1" {
+	if after.Used != "1" || after.Sites[0].Views != 1 {
 		t.Fatalf("after a view: %+v", after)
 	}
 	lit := 0

@@ -83,12 +83,59 @@
 <script>
 // the numbers live: each site's day and the month's count, from the
 // server's stream while the page is seen (homelive.go); a stream with no
-// word for a minute is dropped and another opened
+// word for a minute is dropped and another opened. When a day grows its
+// readers arrive as on the welcome's hero: orange dots fall into the
+// hour under way, a dot a view and three at most a word, and as each
+// lands the bar steps up and the count with it. A new hour, a day drawn
+// anew, or a reader who asks for less motion is drawn as it is.
 (() => {
   if (!document.getElementById("sites") || !window.EventSource) return;
   let es = null, quiet = 0;
   const close = () => { if (es) es.close(); es = null; clearTimeout(quiet); };
   const alive = () => { clearTimeout(quiet); quiet = setTimeout(() => { close(); open(); }, 60000); };
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const words = n => (n === 1 ? "1 view" : n.toLocaleString("en-US") + " views");
+  const say = (row, box, s, v) => {
+    const t = v === s.v ? s.today : words(v) + s.today.slice(s.today.indexOf(" today"));
+    row.querySelector(".tv").textContent = t;
+    box.setAttribute("aria-label", box.getAttribute("aria-label").replace(/: .*$/, ": " + t));
+  };
+  const bars = box => box.getElementsByTagName("i");
+  const snap = v => Math.round(v / 2) * 2; // the hero's 2px cells
+
+  // the dots in the air, each with what its row shows once it lands
+  const air = [];
+  let raf = 0;
+  const ground = row => {
+    for (const d of air.filter(d => d.row === row)) { air.splice(air.indexOf(d), 1); if (d.el) d.el.remove(); }
+  };
+  const fly = ms => {
+    for (const d of air.slice()) {
+      const L = d.row.live, t = Math.min(1, (ms - d.t0) / d.dur), bar = bars(d.box)[L.i];
+      if (t < 0 || !bar) continue;
+      // the hero's way down: a drift across as it starts to fall, and a
+      // drop straight onto the bar's cap at the end
+      const tx = bar.offsetLeft + snap((bar.offsetWidth - 4) / 2), ty = bar.offsetTop + bar.offsetHeight - L.h - 4;
+      if (d.x === undefined) d.x = snap(Math.max(0, Math.min(d.box.clientWidth - 4, tx + (Math.random() * 2 - 1) * 48)));
+      const at = u => {
+        const e = u * u * (3 - 2 * u);
+        return [snap(d.x + (tx - d.x) * e), snap(-4 + (ty + 4) * u * u)];
+      };
+      const [x, y] = at(t), [px, py] = at(Math.max(0, t - .07));
+      if (!d.el) { d.el = document.createElement("b"); d.el.className = "dot"; d.box.appendChild(d.el); }
+      d.el.style.transform = `translate(${x}px, ${y}px)`;
+      d.el.style.boxShadow = px !== x || py !== y ? `${px - x}px ${py - y}px 0 #ffcc99` : "none";
+      if (t < 1) continue;
+      air.splice(air.indexOf(d), 1);
+      d.el.remove();
+      L.v = Math.max(L.v, d.v);
+      L.h = Math.max(L.h, d.h); // within an hour its bar only grows
+      bar.style.setProperty("--t", L.h + "px");
+      say(d.row, d.box, L.s, L.v);
+    }
+    raf = air.length ? requestAnimationFrame(fly) : 0;
+  };
+
   const draw = h => {
     const used = document.getElementById("used"), bar = document.getElementById("usedbar");
     if (used) used.textContent = h.used;
@@ -96,18 +143,41 @@
     for (const s of h.sites) {
       const row = document.getElementById("s-" + s.id), box = row && row.querySelector(".bars");
       if (!box) continue;
-      row.querySelector(".tv").textContent = s.today;
-      box.setAttribute("aria-label", box.getAttribute("aria-label").replace(/: .*$/, ": " + s.today));
-      while (box.children.length < s.bars.length) box.appendChild(document.createElement("i"));
-      while (box.children.length > s.bars.length) box.lastChild.remove();
-      box.style.setProperty("--n", s.bars.length);
+      const is = bars(box), reshaped = is.length !== s.bars.length;
+      if (reshaped) {
+        ground(row); // the box holds its bars alone now
+        while (box.children.length < s.bars.length) box.appendChild(document.createElement("i"));
+        while (box.children.length > s.bars.length) box.lastChild.remove();
+        box.style.setProperty("--n", s.bars.length);
+      }
       s.bars.forEach((b, i) => {
-        const el = box.children[i];
+        const el = is[i];
         el.style.setProperty("--t", b.h + "px");
         el.style.setProperty("--y", b.y + "px");
         el.className = b.c || "";
         if (b.t) el.title = b.t; else el.removeAttribute("title");
       });
+      const now = s.bars.findIndex(b => b.c === "now"), L = row.live, add = L ? s.v - L.gv : 0;
+      if (!L || still || reshaped || now < 0 || now !== L.i || add < 0) {
+        // the first word, a new hour, a day drawn anew: as it is
+        ground(row);
+        const th = now < 0 ? 0 : s.bars[now].h;
+        row.live = { s, i: now, v: s.v, h: th, gv: s.v, gh: th };
+        say(row, box, s, s.v);
+        continue;
+      }
+      // the views since the last word, as dots on their way: the bar and
+      // the count keep what they show until each lands
+      const th = s.bars[now].h, n = Math.min(add, 3), t = performance.now();
+      for (let k = 1; k <= n; k++) {
+        air.push({ row, box, v: L.gv + Math.round(add * k / n), h: snap(L.gh + (th - L.gh) * k / n),
+          t0: t + (k - 1) * 1500 / n + Math.random() * 300, dur: 1000 + Math.random() * 400 });
+      }
+      if (!n && !air.some(d => d.row === row)) L.h = th; // nothing in the air: as the server draws it
+      L.s = s; L.gv = s.v; L.gh = th;
+      is[now].style.setProperty("--t", L.h + "px");
+      say(row, box, s, L.v);
+      if (n && !raf) raf = requestAnimationFrame(fly);
     }
   };
   const open = () => {
@@ -674,7 +744,7 @@ dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
    its day and whether it counts. On a phone the day's words take a line
    of their own under it: the width decides, not the words, so a count
    that grows moves nothing */
-.site .sline { display: flex; align-items: baseline; margin: 0 0 8px; line-height: 16px; }
+.site .sline { display: flex; align-items: baseline; margin: 0; line-height: 16px; }
 .site .name { font-weight: bold; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .site .ico { flex: none; align-self: center; width: 16px; height: 16px; margin-right: 6px; }
 .site .tv { margin-left: auto; padding-left: 12px; color: #555; white-space: nowrap; }
@@ -690,8 +760,10 @@ dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
    today's lavender under an indigo cap, the hour under way peach under
    an orange one, and yesterday's same hour pale behind. The busiest
    hour of the two days is 40px, and the bars are whole 2px steps wide,
-   the room left over shared between them */
-.site .bars { display: flex; justify-content: space-between; align-items: stretch; box-sizing: content-box; height: 40px; margin: 0 0 8px;
+   the room left over shared between them. Over them, 8px of sky, out of
+   which the readers the stream brings fall, the hero's dots */
+.site .bars { position: relative; overflow: hidden; display: flex; justify-content: space-between; align-items: stretch;
+  box-sizing: content-box; height: 40px; padding-top: 8px; margin: 0 0 8px;
   border-bottom: 1px solid #262626; container-type: inline-size; text-decoration: none;
   cursor: pointer; /* a press opens the desk, as the name does: the hand says so */ }
 .site .bars i { position: relative; display: block; flex: none;
@@ -701,6 +773,7 @@ dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .site .bars i::before { --h: var(--y, 0px); background: #ebebff; border-color: #ccccff; }
 .site .bars i::after { --h: var(--t, 0px); background: #9999ff; border-color: #333399; }
 .site .bars i.now::after { background: #ffcc99; border-color: #ff6600; }
+.site .bars .dot { position: absolute; left: 0; top: 0; width: 4px; height: 4px; background: #ff6600; pointer-events: none; }
 .add { display: flex; gap: 12px; align-items: center; margin: 0 0 8px; }
 .add .field { flex: 1; min-width: 0; }
 @media (pointer: coarse) { .field { font-size: 16px; height: 24px; } .field.snip { font-size: 16px; } }

@@ -947,9 +947,9 @@ func TestDrawDayOverYesterday(t *testing.T) {
 	today[9], today[10] = 50, 0 // the busiest of today, and the hour under way, empty yet
 	ago := make([]int, 24)
 	ago[9], ago[14] = 25, 100 // yesterday's busiest is the scale
-	bars, words := drawDay(pts(day, today, 10), pts(day.AddDate(0, 0, -1), ago, 23))
-	if len(bars) != 24 || words != "50 views today" {
-		t.Fatalf("%d bars, %q", len(bars), words)
+	bars, views := drawDay(pts(day, today, 10), pts(day.AddDate(0, 0, -1), ago, 23))
+	if len(bars) != 24 || views != 50 {
+		t.Fatalf("%d bars, %d views", len(bars), views)
 	}
 	for i, want := range map[int]barView{
 		9:  {H: 20, Y: 10, Title: "09:00 · 50 views, 25 yesterday"},

@@ -35,6 +35,7 @@ type liveHome struct {
 type liveSite struct {
 	ID    string    `json:"id"`
 	Today string    `json:"today"`
+	Views int       `json:"v"` // today's, the number in Today: the page counts up to it as its dots land
 	Bars  []barView `json:"bars"`
 }
 
@@ -46,6 +47,7 @@ type siteDay struct {
 	at     time.Time
 	bars   []barView
 	today  string
+	views  int
 	ago    []stats.Point // yesterday's chart
 	agoAt  time.Time     // read then
 	agoFor string        // for the day that began then (today's first hour)
@@ -54,15 +56,15 @@ type siteDay struct {
 // dayOf is a site's day, drawn afresh when the one held is older than
 // most of a tick. Yesterday is over, so it is read again only a minute
 // on (a hit may still be on its way past midnight) or on a new day.
-func dayOf(d *siteDay, st *stats.Stats, now time.Time) ([]barView, string, error) {
+func dayOf(d *siteDay, st *stats.Stats, now time.Time) ([]barView, string, int, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if !d.at.IsZero() && now.Sub(d.at) < liveTick*3/4 && now.After(d.at) {
-		return d.bars, d.today, nil
+		return d.bars, d.today, d.views, nil
 	}
 	pts, err := st.Today(now)
 	if err != nil {
-		return nil, "", err
+		return nil, "", 0, err
 	}
 	day := ""
 	if len(pts) > 0 {
@@ -71,14 +73,14 @@ func dayOf(d *siteDay, st *stats.Stats, now time.Time) ([]barView, string, error
 	if d.ago == nil || d.agoFor != day || now.Sub(d.agoAt) > time.Minute || !now.After(d.agoAt) {
 		ago, err := st.Yesterday(now)
 		if err != nil {
-			return nil, "", err
+			return nil, "", 0, err
 		}
 		d.ago, d.agoAt, d.agoFor = ago, now, day
 	}
 	bars, views := drawDay(pts, d.ago)
-	d.bars, d.today = bars, dayLine(views, st.Online())
+	d.bars, d.today, d.views = bars, dayLine(viewWords(views)+" today", st.Online()), views
 	d.at = now
-	return d.bars, d.today, nil
+	return d.bars, d.today, d.views, nil
 }
 
 // homeNow is what the stream says of an owner's account now.
@@ -110,11 +112,11 @@ func (a *App) homeNow(addr string, now time.Time) (liveHome, error) {
 	a.mu.Unlock()
 	h.Sites = []liveSite{}
 	for _, o := range all { // with the app let go
-		bars, today, err := dayOf(o.day, o.st, now)
+		bars, today, views, err := dayOf(o.day, o.st, now)
 		if err != nil {
 			continue // removed meanwhile, its file closed
 		}
-		h.Sites = append(h.Sites, liveSite{ID: o.id, Today: today, Bars: bars})
+		h.Sites = append(h.Sites, liveSite{ID: o.id, Today: today, Views: views, Bars: bars})
 	}
 	return h, nil
 }

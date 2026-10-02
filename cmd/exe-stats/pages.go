@@ -122,7 +122,7 @@ func (row *siteRow) today(now time.Time) error {
 	if d == nil {
 		d = &siteDay{}
 	}
-	bars, line, err := dayOf(d, row.st, now)
+	bars, line, _, err := dayOf(d, row.st, now)
 	if err != nil {
 		return err
 	}
@@ -137,8 +137,8 @@ func dayLine(views string, online int) string {
 }
 
 // drawDay is a day's chart as its row draws it, over the day before's:
-// its bars, and its views in words.
-func drawDay(pts, ago []stats.Point) ([]barView, string) {
+// its bars, and its views.
+func drawDay(pts, ago []stats.Point) ([]barView, int) {
 	// yesterday by the hour on the clock, so a day of 23 or 25 hours
 	// still stands over its neighbour's
 	clock := func(p stats.Point) int {
@@ -186,7 +186,7 @@ func drawDay(pts, ago []stats.Point) ([]barView, string) {
 		}
 		bars = append(bars, b)
 	}
-	return bars, viewWords(total) + " today"
+	return bars, total
 }
 
 // viewWords is a count of page views in words: 1 view, 12,345 views.

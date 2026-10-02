@@ -211,6 +211,12 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     // ---- its settings: the setup check waits for the first view ----
     const sHref = await page.locator('.site .buttons a:has-text("Settings…")').getAttribute('href');
     ok(sHref === `/sites/${siteId}/settings`, 'Settings… leads to the site\'s settings', sHref);
+    // the views to come fall into the day as dots: count each one made
+    await page.evaluate(() => {
+      window.__dots = 0;
+      new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if (n.className === 'dot') window.__dots++; })))
+        .observe(document.getElementById('sites'), { subtree: true, childList: true });
+    });
     const set = await rich.ctx.newPage();
     set.errors = [];
     set.on('pageerror', e => set.errors.push(String(e)));
@@ -257,6 +263,9 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
       && /^3 of /.test(document.getElementById('used').parentElement.textContent), null, { timeout: 10000 }).then(() => true).catch(() => false);
     ok(liveDay, "the open page's day, its bar and the month's count follow the views without a reload",
       await page.evaluate(() => [document.querySelector('.site .tv').textContent, document.getElementById('used').textContent]));
+    await page.waitForFunction(() => !document.querySelector('.site .dot'), null, { timeout: 5000 }).catch(() => {});
+    const fell = await page.evaluate(() => [window.__dots, document.querySelectorAll('.site .dot').length]);
+    ok(fell[0] >= 1 && fell[0] <= 3 && fell[1] === 0, 'the views fell into the hour as dots, a dot a view, and every one has landed', fell);
 
     // ---- the Sites window draws the day: a bar an hour, the views in the hour still filling ----
     await page.reload();
@@ -270,14 +279,15 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
         ghost: [before(bars[0]).backgroundColor, before(bars[0]).height],
         to: bars.filter(x => x.className === 'to').length, w: b.width, rw: row.width, h: b.height, floor: getComputedStyle(document.querySelector('.site .bars')).borderBottom,
         first: bars[0].getBoundingClientRect().left - b.left, last: b.right - bars[bars.length - 1].getBoundingClientRect().right,
+        sky: bars[0].getBoundingClientRect().top - b.top, slot: bars[0].getBoundingClientRect().height,
         oneLine: Math.round(line.height) === 16 && Math.round(tv.top) === Math.round(st.top) && st.right <= line.right + 0.5, tv: document.querySelector('.site .tv').textContent };
     });
     ok(day.n >= 23 && day.n <= 25 && day.now.length === 1 && day.now[0][0] === '40px' && day.now[0][1] === 'rgb(255, 102, 0)' && day.now[0][2] === 'rgb(255, 204, 153)',
       "the day is a bar an hour, this hour's the busiest and still filling, in the hero's orange", day);
     ok(day.ghost[0] === 'rgb(235, 235, 255)' && day.ghost[1] === '0px', 'yesterday stands pale behind each hour: empty, as nothing came yesterday', day.ghost);
     ok(day.tv === '3 views today · 1 online' && day.oneLine, "its views and who is on it in words, on the name's line before Counting", day);
-    ok(Math.round(day.w) === Math.round(day.rw) && day.first === 0 && day.last === 0 && Math.round(day.h) === 41 && day.floor.startsWith('1px solid'),
-      'the day is the row wide, 40px over a floor line', day);
+    ok(Math.round(day.w) === Math.round(day.rw) && day.first === 0 && day.last === 0 && Math.round(day.h) === 49 && day.sky === 8 && day.slot === 40 && day.floor.startsWith('1px solid'),
+      'the day is the row wide, 40px under 8px of sky and over a floor line', day);
     ok(await page.locator('.site .bars').getAttribute('href') === `/sites/${siteId}` && await page.locator('.site .bars').evaluate(e => getComputedStyle(e).cursor) === 'pointer',
       'the day is a press to the desk, and the pointer says so');
     const btnCursors = await page.locator('.site .buttons .btn').evaluateAll(bs => bs.map(b => getComputedStyle(b).cursor));
