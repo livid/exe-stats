@@ -208,7 +208,9 @@ name and every name under it, twenty at most; each also counts its
 `www.` name, as the domain does. A view from another of the site's hosts
 is listed on the desk by host and path (`blog.example.com/post`), so its
 front page is not the domain's, and a link from one of the site's hosts
-to another is no source.
+to another is no source. At the foot of the settings a Danger Zone holds
+Remove Site…, which asks before the site and its numbers go; the Sites
+window has no Remove of its own.
 
 **Signing in** offers each detected wallet by name and icon when more
 than one is installed, as the hub does. It is one signature over a message

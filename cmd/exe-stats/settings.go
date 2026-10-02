@@ -118,6 +118,7 @@ func (a *App) ownSite(addr, id string) *siteEntry {
 type settingsData struct {
 	Host, ID, Domain, Snippet, TZ string
 	Counting                      bool
+	Removing                      bool // Remove Site… was pressed: the page asks first
 	Setup                         setupView
 	Note                          setupNote // a view refused while the snippet works
 	Hosts                         []hostRow // besides the domain
@@ -153,7 +154,7 @@ func (a *App) handleSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d := settingsData{Host: a.host(r), ID: e.site.ID, Domain: e.site.Domain, Snippet: a.snippet(r, e.site.ID),
-		TZ: e.site.TZ, Counting: a.counting(ac, e.site.ID)}
+		TZ: e.site.TZ, Counting: a.counting(ac, e.site.ID), Removing: r.URL.Query().Get("remove") != ""}
 	d.Setup, d.Note = a.setupOf(e, now)
 	d.Hosts, d.Ignored = hostRows(e.site), e.site.Ignored
 	d.Badge, d.Styles = e.site.Badge, badgeRows(e.site.Badge)

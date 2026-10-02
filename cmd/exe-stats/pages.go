@@ -91,13 +91,13 @@ type tierRow struct {
 }
 
 type siteRow struct {
-	ID, Domain         string
-	Counting, Removing bool
-	Icon               bool   // the site's favicon is kept (siteicon.go)
-	Stamp              string // and its hash, in its URL
-	Bars               []barView
-	Today              string // the day's views, in words
-	st                 *stats.Stats
+	ID, Domain string
+	Counting   bool
+	Icon       bool   // the site's favicon is kept (siteicon.go)
+	Stamp      string // and its hash, in its URL
+	Bars       []barView
+	Today      string // the day's views, in words
+	st         *stats.Stats
 }
 
 // barView is an hour of a site's day on its row: a box chartH high at
@@ -325,7 +325,7 @@ func (a *App) fill(d *homeData, ac *acct, r *http.Request, now time.Time) {
 		d.Lines = append(d.Lines, "Paused: the balance covers no tier, so nothing is counted. Everything counted so far is still here to read. Top up and press Check Now.")
 	}
 	for i, s := range ac.sites {
-		row := siteRow{ID: s.ID, Domain: s.Domain, Counting: i < slots, Removing: r.URL.Query().Get("remove") == s.ID}
+		row := siteRow{ID: s.ID, Domain: s.Domain, Counting: i < slots}
 		if e := a.sites[s.ID]; e != nil {
 			row.Icon, row.Stamp = a.iconOf(e, now)
 			if st, err := a.statsOf(e); err == nil {

@@ -313,6 +313,24 @@ func TestSitesAndBeacons(t *testing.T) {
 		t.Fatalf("stored usage = %+v", u)
 	}
 
+	// Remove Site… is at the foot of the site's settings, and asks
+	// first; the Sites window has none
+	if home := h.do(w, "GET", "/?remove="+shop, "", nil).Body.String(); strings.Contains(home, "Remove") {
+		t.Fatal("the Sites window still has Remove")
+	}
+	set := h.do(w, "GET", "/sites/"+shop+"/settings", "", nil).Body.String()
+	if i := strings.Index(set, `<section id="danger">`); i < 0 || strings.Contains(set[i+1:], "<section") ||
+		!strings.Contains(set[i:], `href="/sites/`+shop+`/settings?remove=1#danger">Remove Site…</a>`) ||
+		strings.Contains(set, `action="/v1/sites/`+shop+`/remove"`) {
+		t.Fatalf("the settings' Danger Zone:\n%s", set)
+	}
+	ask := h.do(w, "GET", "/sites/"+shop+"/settings?remove=1", "", nil).Body.String()
+	if !strings.Contains(ask, `<span class="say">Remove shop.example and its numbers? This cannot be undone.</span>`) ||
+		!strings.Contains(ask, `<a class="btn" href="/sites/`+shop+`/settings#danger">Cancel</a>`) ||
+		!strings.Contains(ask, `<form method="post" action="/v1/sites/`+shop+`/remove"><button class="btn">Remove</button></form>`) {
+		t.Fatalf("Remove Site… does not ask:\n%s", ask)
+	}
+
 	// removing the site takes its file with it
 	if loc := h.form(w, "/v1/sites/"+shop+"/remove", nil); loc != "/?m=removed" {
 		t.Fatalf("remove: %s", loc)

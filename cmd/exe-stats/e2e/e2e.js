@@ -230,7 +230,7 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     ok(await page.locator('.site .bars').getAttribute('href') === `/sites/${siteId}` && await page.locator('.site .bars').evaluate(e => getComputedStyle(e).cursor) === 'pointer',
       'the day is a press to the desk, and the pointer says so');
     const btnCursors = await page.locator('.site .buttons .btn').evaluateAll(bs => bs.map(b => getComputedStyle(b).cursor));
-    ok(btnCursors.length >= 3 && btnCursors.every(c => c === 'default'), "the row's buttons wear no hand", btnCursors);
+    ok(btnCursors.length === 2 && btnCursors.every(c => c === 'default'), "the row's buttons wear no hand", btnCursors);
     await Promise.all([page.waitForNavigation(), page.click('.site .bars')]);
     ok(page.url() === `${APP}/sites/${siteId}`, 'a press on the day opens the desk', page.url());
     await Promise.all([page.waitForNavigation(), page.goBack()]);
@@ -360,14 +360,14 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
       const b = await box(c.page, '#account .buttons .btn');
       ok(Math.round(b.height) === 20, `${tag}: account buttons are 20px high`, b);
       const tops = await c.page.locator('.site .buttons .btn').evaluateAll(bs => bs.filter(x => x.offsetParent).map(x => Math.round(x.getBoundingClientRect().top)));
-      ok(tops.length >= 3 && tops.every(t => t === tops[0]), `${tag}: a site's buttons are one row`, tops);
+      ok(tops.length === 2 && tops.every(t => t === tops[0]), `${tag}: a site's buttons are one row`, tops);
       const bars = await c.page.evaluate(() => [...document.querySelectorAll('.site .bars i')].map(x => x.getBoundingClientRect().width));
       ok(bars.length > 0 && bars.every(w => w === 6), `${tag}: a site's bars are 6px wide`, bars.slice(0, 3));
       await shot(c.page, 'account-' + tag);
       await c.page.goto(`${APP}/sites/${siteId}/settings`);
       ok(await c.page.locator('#setup.ok').count() === 1 && await noScroll(c.page), `${tag}: the settings show the green check and do not scroll sideways`);
       const heights = await c.page.locator('#settings .btn:not(.tbox)').evaluateAll(bs => bs.map(x => Math.round(x.getBoundingClientRect().height)));
-      ok(heights.length === 8 && heights.every(h => h === 20), `${tag}: settings buttons are 20px high`, heights);
+      ok(heights.length === 9 && heights.every(h => h === 20), `${tag}: settings buttons are 20px high`, heights);
       // the note: its words, then Ignore at the right, inside the box
       const note = await c.page.evaluate(() => {
         const n = document.querySelector('.notice.ask'), b = n.querySelector('.btn'), t = n.querySelector('span');
@@ -413,6 +413,8 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
       await shot(c.page, 'settings-' + tag);
       await c.page.locator('#ignored').evaluate(x => x.scrollIntoView({ block: 'center' }));
       await shot(c.page, 'settings-ignored-' + tag);
+      await c.page.locator('#danger').evaluate(x => x.scrollIntoView({ block: 'end' }));
+      await shot(c.page, 'settings-danger-' + tag);
       await c.page.locator('#badge').evaluate(x => x.scrollIntoView({ block: 'end' }));
       await shot(c.page, 'settings-badge-' + tag);
       await c.ctx.close();
@@ -438,15 +440,19 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     ok(await noScroll(page), 'short: the page does not scroll sideways');
     await shot(page, 'short-dpr1');
 
-    // ---- remove: asked first, then gone ----
-    await page.click('.site .buttons .btn:has-text("Remove…")');
-    await page.waitForSelector('.site .say');
-    ok((await page.locator('.site .say').innerText()).startsWith('Remove shop.example and its numbers?'), 'Remove… asks first');
-    await page.click('.site .buttons a:has-text("Cancel")');
-    ok(await page.locator('.site').count() === 1, 'Cancel keeps the site');
-    await page.click('.site .buttons .btn:has-text("Remove…")');
-    await Promise.all([page.waitForNavigation(), page.click('.site .buttons button:has-text("Remove")')]);
-    ok(await page.locator('.site').count() === 0, 'Remove takes the site away');
+    // ---- remove: from the foot of the site's settings, asked first, then gone ----
+    ok(await page.locator('.site .btn:has-text("Remove")').count() === 0, 'the Sites window has no Remove');
+    await page.goto(`${APP}/sites/${siteId}/settings`);
+    ok(await page.evaluate(() => document.querySelector('#danger') === [...document.querySelectorAll('section')].pop()), 'the Danger Zone is the last section');
+    await Promise.all([page.waitForNavigation(), page.click('#remove-site')]);
+    ok((await page.locator('#danger .say').innerText()).startsWith('Remove shop.example and its numbers?') && new URL(page.url()).hash === '#danger', 'Remove Site… asks first', page.url());
+    await shot(page, 'danger-ask-dpr1');
+    await Promise.all([page.waitForNavigation(), page.click('#danger a:has-text("Cancel")')]);
+    ok(await page.locator('#danger .say').count() === 0 && await page.locator('#remove-site').count() === 1, 'Cancel keeps the site');
+    await Promise.all([page.waitForNavigation(), page.click('#remove-site')]);
+    await Promise.all([page.waitForNavigation(), page.click('#danger button:has-text("Remove")')]);
+    ok(new URL(page.url()).pathname === '/' && await page.locator('.site').count() === 0 &&
+      (await page.locator('#account .flash').innerText()) === 'The site and its numbers are removed.', 'Remove takes the site away, and says so at home', page.url());
     ok(!fs.existsSync(path.join(DIR, 'data', 'sites', siteId + '.db')), "and its file");
 
     // ---- sign out ----

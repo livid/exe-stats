@@ -43,16 +43,11 @@
       {{range .Sites}}<div class="site" id="s-{{.ID}}">
         <div class="sline">{{if .Icon}}<img class="ico" src="/sites/{{.ID}}/icon?v={{.Stamp}}" width="16" height="16" alt="">{{end}}<a class="name" href="/sites/{{.ID}}">{{.Domain}}</a><span class="st">{{if .Counting}}Counting{{else}}Resting{{end}}</span></div>
         <div class="today"><a class="bars" href="/sites/{{.ID}}" aria-label="The desk of {{.Domain}}. Today, a bar an hour: {{.Today}}">{{range .Bars}}<i{{with .Class}} class="{{.}}"{{end}} style="height: {{.H}}px"{{with .Title}} title="{{.}}"{{end}}></i>{{end}}</a><span class="tv">{{.Today}}</span></div>
-        {{if .Removing}}<div class="buttons">
-          <span class="say">Remove {{.Domain}} and its numbers? This cannot be undone.</span>
-          <a class="btn" href="/#s-{{.ID}}">Cancel</a>
-          <form method="post" action="/v1/sites/{{.ID}}/remove"><button class="btn">Remove</button></form>
-        </div>{{else}}<div class="buttons">
-          <a class="btn" href="/?remove={{.ID}}#s-{{.ID}}">Remove…</a>
+        <div class="buttons">
           {{if not .Counting}}<form method="post" action="/v1/sites/{{.ID}}/pick"><button class="btn">Count This One</button></form>{{end}}
           <a class="btn" href="/sites/{{.ID}}/settings">Settings…</a>
           <a class="btn" href="/sites/{{.ID}}">Open</a>
-        </div>{{end}}
+        </div>
       </div>{{else}}<p>No sites yet. Add one: its settings hand you the snippet for the head of its pages, and its desk fills as readers come.</p>{{end}}
       <form class="add" method="post" action="/v1/sites">
         <input type="hidden" name="tz" id="tz" value="UTC">
@@ -210,7 +205,9 @@
      the check, with Ignore when it names a host; once a host is ignored,
      a list of them follows the hosts, to take one off. Badge: a pop-up of styles, None until the owner
      chooses one, and while one is on the site's badge as it stands, with
-     the HTML and the Markdown that show it. Above them, the exe
+     the HTML and the Markdown that show it. Danger Zone, at the very
+     bottom: Remove Site…, which asks before the site and its numbers
+     go. Above them, the exe
      documentation's toolbar with the trail: Sites, the site's desk, and
      this page. */}}
 {{define "settings"}}<!doctype html>
@@ -366,6 +363,17 @@ section + section { margin-top: 12px; padding-top: 12px; border-top: 1px solid #
         <button class="btn copy" type="button" data-for="badge-html" data-name="The HTML">Copy HTML</button>
       </div>
       {{end}}<p class="flash{{if and .Fault (eq .SaidIn "badge")}} fault{{end}}" id="badge-said" role="status">{{if eq .SaidIn "badge"}}{{if .Fault}}{{.Fault}}{{else}}{{.Said}}{{end}}{{end}}</p>
+      </section>
+      <section id="danger">
+      <h2>Danger Zone</h2>
+      <p>Removing the site deletes every number counted for it, and its snippet counts nothing from then on.</p>
+      {{if .Removing}}<div class="buttons">
+        <span class="say">Remove {{.Domain}} and its numbers? This cannot be undone.</span>
+        <a class="btn" href="/sites/{{.ID}}/settings#danger">Cancel</a>
+        <form method="post" action="/v1/sites/{{.ID}}/remove"><button class="btn">Remove</button></form>
+      </div>{{else}}<div class="buttons">
+        <a class="btn" id="remove-site" href="/sites/{{.ID}}/settings?remove=1#danger">Remove Site…</a>
+      </div>{{end}}
       </section>
     </div>
     <div class="statusbar"><span>{{if .Counting}}Counting{{else}}Resting{{end}}</span><span>Days begin in {{.TZ}}</span></div>
