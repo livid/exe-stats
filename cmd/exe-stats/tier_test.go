@@ -115,7 +115,7 @@ func TestCountMonths(t *testing.T) {
 
 func TestTierOf(t *testing.T) {
 	ru := testRules()
-	for raw, want := range map[int64]int{0: -1, 9999*tok + 999999: -1, 10000 * tok: 0, 49999 * tok: 0, 50000 * tok: 1, 100000 * tok: 2, 5000000 * tok: 2} {
+	for raw, want := range map[int64]int{0: -1, 9999*tok + 999999: -1, 10000 * tok: 0, 49999 * tok: 0, 50000 * tok: 1, 100000 * tok: 2, 999999 * tok: 2, 1000000 * tok: 3, 5000000 * tok: 3} {
 		if got := ru.tierOf(raw); got != want {
 			t.Errorf("tierOf(%d) = %d, want %d", raw, got, want)
 		}

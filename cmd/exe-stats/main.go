@@ -78,7 +78,8 @@ func defaults(c Config) Config {
 		c.Tiers = []Tier{
 			{Name: "Base", Hold: 10000, Sites: 2, Views: 10000},
 			{Name: "Middle", Hold: 50000, Sites: 5, Views: 100000},
-			{Name: "Top", Hold: 100000, Sites: 10, Views: 500000},
+			{Name: "High", Hold: 100000, Sites: 10, Views: 500000},
+			{Name: "Top", Hold: 1000000, Sites: 50, Views: 5000000},
 		}
 	}
 	if c.GraceDays == 0 {
