@@ -206,7 +206,9 @@
      change: the line has the room of its longest wording. Hosts: the
      hosts whose pages count besides the domain, a list box with Remove
      under it and a field to add one; each press is a form answered with
-     the page again. Badge: a pop-up of styles, None until the owner
+     the page again. A view refused while the snippet works is noted under
+     the check, with Ignore when it names a host; once a host is ignored,
+     a list of them follows the hosts, to take one off. Badge: a pop-up of styles, None until the owner
      chooses one, and while one is on the site's badge as it stands, with
      the HTML and the Markdown that show it. Above them, the exe
      documentation's toolbar with the trail: Sites, the site's desk, and
@@ -278,6 +280,10 @@ section + section { margin-top: 12px; padding-top: 12px; border-top: 1px solid #
 /* narrower than any phone: the page's own name alone, and the window's
    title bar says the same thing above it */
 @media (max-width: 359px) { .tools .crumbs .crumb { display: none; } }
+/* a note that names a host: Ignore at its right, or under its words when
+   they need the room */
+.notice.ask { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 12px; margin: 0 0 8px; }
+.notice.ask span { flex: 1 1 16em; min-width: 0; line-height: 16px; overflow-wrap: anywhere; }
 /* the badge's style: a pop-up after its label, as a control panel has it */
 .style { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; }
 .style .popup { width: 140px; }
@@ -297,8 +303,11 @@ section + section { margin-top: 12px; padding-top: 12px; border-top: 1px solid #
         <svg class="tick" width="16" height="16" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true"><path class="shadow" fill="#000" fill-opacity=".4" d="M14 3h1v1H14zM14 4h1v1H14zM13 5h1v1H13zM12 6h1v1H12zM11 7h1v1H11zM10 8h1v1H10zM9 9h1v1H9zM8 10h1v1H8zM7 11h1v1H7zM6 12h1v1H6zM5 13h2v1H5z"/><path class="shadow" fill="#000" fill-opacity=".18" d="M15 3h1v1H15zM15 4h1v1H15zM14 5h1v1H14zM13 6h1v1H13zM12 7h1v1H12zM11 8h1v1H11zM10 9h1v1H10zM9 10h1v1H9zM8 11h1v1H8zM7 12h1v1H7zM7 13h1v1H7z"/><path class="mark" fill="#ccc" d="M12 3h2v1H12zM11 4h3v1H11zM10 5h3v1H10zM9 6h3v1H9zM0 7h2v1H0zM8 7h3v1H8zM0 8h3v1H0zM7 8h3v1H7zM1 9h3v1H1zM6 9h3v1H6zM2 10h6v1H2zM3 11h4v1H3zM4 12h2v1H4z"/></svg>
         <p id="setup-line" role="status">{{.Setup.Line}}</p>
       </div>
-      {{with .Note}}<p class="notice">{{.}}</p>{{end}}
-      <input class="field snip" id="snip" readonly value="{{.Snippet}}" aria-label="The snippet for {{.Domain}}">
+      {{with .Note}}{{if .Host}}<form class="notice ask" method="post" action="/v1/sites/{{$.ID}}/ignore">
+        <span>{{.Line}}</span><input type="hidden" name="host" value="{{.Host}}"><button class="btn" id="ignore">Ignore</button>
+      </form>{{else if .Line}}<p class="notice">{{.Line}}</p>{{end}}{{end}}
+      {{if eq .SaidIn "setup"}}<p class="flash{{if .Fault}} fault{{end}}" id="setup-said" role="status">{{if .Fault}}{{.Fault}}{{else}}{{.Said}}{{end}}</p>
+      {{end}}      <input class="field snip" id="snip" readonly value="{{.Snippet}}" aria-label="The snippet for {{.Domain}}">
       <div class="buttons">
         <button class="btn" id="copy" type="button">Copy Snippet</button>
         <a class="btn" href="/sites/{{.ID}}">Open Desk</a>
@@ -321,6 +330,18 @@ section + section { margin-top: 12px; padding-top: 12px; border-top: 1px solid #
       </form>
       <p class="flash{{if and .Fault (eq .SaidIn "hosts")}} fault{{end}}" id="hosts-said" role="status">{{if eq .SaidIn "hosts"}}{{if .Fault}}{{.Fault}}{{else}}{{.Said}}{{end}}{{end}}</p>
       </section>
+      {{if or .Ignored (eq .SaidIn "ignored")}}<section id="ignored">
+      <h2>Ignored</h2>
+      {{if .Ignored}}<p>Views from these hosts go unnoted under Setup. They do not count either way: to count one, add it under Hosts.</p>
+      <form method="post" action="/v1/sites/{{.ID}}/ignored/remove">
+        <div class="list" role="radiogroup" aria-label="The hosts ignored">
+          {{range .Ignored}}<label class="row"><input type="radio" name="host" value="{{.}}"><span class="name">{{.}}</span></label>
+          {{end}}
+        </div>
+        <div class="buttons"><button class="btn" id="remove-ignored" disabled>Remove</button></div>
+      </form>
+      {{end}}<p class="flash{{if and .Fault (eq .SaidIn "ignored")}} fault{{end}}" id="ignored-said" role="status">{{if eq .SaidIn "ignored"}}{{if .Fault}}{{.Fault}}{{else}}{{.Said}}{{end}}{{end}}</p>
+      </section>{{end}}
       <section id="badge">
       <h2>Badge</h2>
       <p>An 88×31 button for the site's own pages, with its numbers on it for anyone to read. Hit Counter shows every page view since the site was added on its wheels, beside today's in bars of two hours.</p>
@@ -364,10 +385,12 @@ document.getElementById("badge-style").addEventListener("change", e => e.target.
     f.select();
     if (navigator.clipboard) navigator.clipboard.writeText(f.value).catch(() => {});
   });
-  // Remove takes the chosen host, so it waits for one
-  const rm = document.getElementById("remove-host"), picks = document.querySelectorAll('.list input[name="host"]');
-  rm.disabled = !document.querySelector('.list input:checked');
-  for (const i of picks) i.addEventListener("change", () => { rm.disabled = false; });
+  // a list's Remove takes the chosen host, so it waits for one
+  for (const l of document.querySelectorAll(".list")) {
+    const rm = l.closest("form").querySelector("button");
+    rm.disabled = !l.querySelector("input:checked");
+    l.addEventListener("change", () => { rm.disabled = false; });
+  }
   // until the snippet reports, ask again: a page opened on the site in
   // another tab turns the check green here
   const box = document.getElementById("setup"), line = document.getElementById("setup-line");

@@ -202,6 +202,8 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /v1/sites/{id}/setup", a.handleSetup)
 	mux.HandleFunc("POST /v1/sites/{id}/hosts", a.handleAddHost)
 	mux.HandleFunc("POST /v1/sites/{id}/hosts/remove", a.handleRemoveHost)
+	mux.HandleFunc("POST /v1/sites/{id}/ignore", a.handleIgnore)
+	mux.HandleFunc("POST /v1/sites/{id}/ignored/remove", a.handleUnignore)
 	mux.HandleFunc("POST /v1/sites/{id}/badge", a.handleBadgeStyle)
 	mux.HandleFunc("GET /robots.txt", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")

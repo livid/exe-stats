@@ -244,10 +244,12 @@ func (a *App) collect(r *http.Request) string {
 	}
 	// the page must be on one of the site's hosts, and a browser's
 	// beacon comes from that page: a hit for somebody else's site id is
-	// refused here
+	// refused here, and noted unless its owner ignores the host
 	host := hostOf(page.Host)
 	if !e.site.counts(host) {
-		e.refused = refusal{At: now.UnixMilli(), Why: beaconForeign, From: host}
+		if !e.site.ignores(host) {
+			e.refused = refusal{At: now.UnixMilli(), Why: beaconForeign, From: host}
+		}
 		return beaconForeign
 	}
 	if o := r.Header.Get("Origin"); o != "" {
@@ -256,7 +258,9 @@ func (a *App) collect(r *http.Request) string {
 			if err == nil {
 				from = hostOf(ou.Host)
 			}
-			e.refused = refusal{At: now.UnixMilli(), Why: beaconOrigin, From: from, Page: host}
+			if from == "" || !e.site.ignores(from) {
+				e.refused = refusal{At: now.UnixMilli(), Why: beaconOrigin, From: from, Page: host}
+			}
 			return beaconOrigin
 		}
 	}

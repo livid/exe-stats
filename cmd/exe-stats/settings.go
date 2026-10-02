@@ -48,12 +48,19 @@ func (a *App) seenOf(e *siteEntry) int64 {
 	return e.site.Seen
 }
 
+// setupNote is a view refused while the snippet works, in a line, and
+// the host it names when the owner may ignore it.
+type setupNote struct{ Line, Host string }
+
 // setupOf is the check, and a note when the snippet works but a view
 // was refused in the last day. The caller holds a.mu.
-func (a *App) setupOf(e *siteEntry, now time.Time) (setupView, string) {
+func (a *App) setupOf(e *siteEntry, now time.Time) (setupView, setupNote) {
 	seen, rf := a.seenOf(e), e.refused
-	if rf.Why == beaconForeign && e.site.counts(rf.From) {
+	switch {
+	case rf.Why == beaconForeign && e.site.counts(rf.From):
 		rf = refusal{} // its host has been listed since: no reason any more
+	case rf.From != "" && e.site.ignores(rf.From):
+		rf = refusal{} // its host has been ignored since
 	}
 	why := ""
 	if rf.At != 0 {
@@ -69,15 +76,15 @@ func (a *App) setupOf(e *siteEntry, now time.Time) (setupView, string) {
 	}
 	if seen == 0 {
 		if why != "" {
-			return setupView{Line: why}, ""
+			return setupView{Line: why}, setupNote{}
 		}
-		return setupView{Line: "Waiting for the first page view. Paste the snippet into the site's head, then open a page."}, ""
+		return setupView{Line: "Waiting for the first page view. Paste the snippet into the site's head, then open a page."}, setupNote{}
 	}
 	v := setupView{OK: true, Line: "The snippet works: the last page view came " + ago(now.Sub(time.UnixMilli(seen))) + "."}
 	if rf.At == 0 || now.Sub(time.UnixMilli(rf.At)) > 24*time.Hour {
-		why = ""
+		return v, setupNote{}
 	}
-	return v, why
+	return v, setupNote{Line: why, Host: e.site.ignorable(rf)}
 }
 
 // flushSeen writes down the sites whose snippet has reported since the
@@ -112,8 +119,9 @@ type settingsData struct {
 	Host, ID, Domain, Snippet, TZ string
 	Counting                      bool
 	Setup                         setupView
-	Note                          string    // a view refused while the snippet works
+	Note                          setupNote // a view refused while the snippet works
 	Hosts                         []hostRow // besides the domain
+	Ignored                       []string  // hosts whose refused views go unnoted
 	Said, Fault                   string    // what the last press did
 	SaidIn                        string    // and the section it says it in
 	Badge                         int       // the badge's style; 0 none
@@ -147,7 +155,7 @@ func (a *App) handleSettings(w http.ResponseWriter, r *http.Request) {
 	d := settingsData{Host: a.host(r), ID: e.site.ID, Domain: e.site.Domain, Snippet: a.snippet(r, e.site.ID),
 		TZ: e.site.TZ, Counting: a.counting(ac, e.site.ID)}
 	d.Setup, d.Note = a.setupOf(e, now)
-	d.Hosts = hostRows(e.site)
+	d.Hosts, d.Ignored = hostRows(e.site), e.site.Ignored
 	d.Badge, d.Styles = e.site.Badge, badgeRows(e.site.Badge)
 	d.BadgeSrc, d.BadgeHTML, d.BadgeMD, d.BadgeAlt = a.badgeLinks(r, e.site)
 	a.mu.Unlock()

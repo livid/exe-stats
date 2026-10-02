@@ -195,7 +195,13 @@ beacon sent from another origin), and the page asks
 `/v1/sites/{id}/setup` again every few seconds, so a page of the site
 opened in another tab turns it green. When the snippet last reported is
 kept in `app.db`, to the minute; a refusal only in memory. A site that
-counted before the check is read once from its own hits. Under it the
+counted before the check is read once from its own hits. Once the
+snippet works, a view refused in the last day is noted under the check;
+a note that names a host — a mirror, a scraper, a translator carrying the
+site's snippet — has **Ignore**, after which that host's views are
+refused without a note (`sites.ignored`, twenty at most). The ignored
+hosts are listed after the hosts, where Remove has them noted again, and
+listing one as a host takes it off. Under the check the
 site's **hosts**: besides its domain, the names whose pages count too —
 `blog.example.com`, `example.github.io`, or `*.example.com` for that
 name and every name under it, twenty at most; each also counts its

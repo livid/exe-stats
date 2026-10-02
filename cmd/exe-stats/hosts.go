@@ -135,6 +135,14 @@ func (a *App) editHosts(w http.ResponseWriter, r *http.Request, done string, cha
 		return
 	}
 	e.site.Hosts = hosts
+	// an ignored host that counts now is the site's own, and off that list
+	if ig := slices.DeleteFunc(slices.Clone(e.site.Ignored), e.site.counts); len(ig) != len(e.site.Ignored) {
+		if err := a.store.setIgnored(id, ig); err != nil {
+			a.log("ignored: %v", err)
+		} else {
+			e.site.Ignored = ig
+		}
+	}
 	if ac := a.accts[addr]; ac != nil {
 		ac.sites, _ = a.store.sitesOf(addr)
 	}

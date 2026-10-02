@@ -109,7 +109,8 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     for (let i = 0; ; i++) {
       try { await fetch(APP + '/robots.txt'); break; } catch (e) { if (i > 50) throw new Error('the server did not start'); await new Promise(r => setTimeout(r, 100)); }
     }
-    browser = await chromium.launch({ args: ['--host-resolver-rules=MAP shop.example 127.0.0.1:17796,MAP *.shop.example 127.0.0.1:17796'] });
+    browser = await chromium.launch({ args: ['--host-resolver-rules=MAP shop.example 127.0.0.1:17796,MAP *.shop.example 127.0.0.1:17796,' +
+      'MAP mirror.example 127.0.0.1:17796,MAP other.example 127.0.0.1:17796'] });
 
     // ---- signed out, at every scale and on a phone ----
     for (const v of [{ dpr: 1 }, { dpr: 1.5 }, { dpr: 2 }, { dpr: 3, phone: true, viewport: { width: 390, height: 844 } }]) {
@@ -262,7 +263,7 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     await blog.page.waitForTimeout(300);
     ok(said[0] === "not this site's page", 'a subdomain not listed is not counted', said);
     await hp.goto(`${APP}/sites/${siteId}/settings`);
-    const why = await hp.locator('.notice').innerText().catch(() => '');
+    const why = await hp.locator('.notice span').innerText().catch(() => '');
     ok(why.startsWith('A view came from blog.shop.example') && why.endsWith('it is not one of the hosts below.'), 'the settings say why', why);
     ok(await hp.locator('#remove-host').isDisabled(), 'Remove waits for a host to be chosen');
     const addHost = async h => {
@@ -284,6 +285,33 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     await shot(hp, 'hosts-chosen-dpr1');
     await Promise.all([hp.waitForNavigation(), hp.click('#remove-host')]);
     ok(await hp.locator('#hosts-said').innerText() === 'That host no longer counts.' && await hp.locator('.list .row').count() === 1, 'Remove takes it off the list');
+
+    // ---- a host the owner cannot help: Ignore, and it is noted no more ----
+    const lastSaid = async u => { await blog.page.goto(u); await blog.page.waitForTimeout(300); return said[said.length - 1]; };
+    ok(await lastSaid('http://mirror.example/tea') === "not this site's page", 'a mirror is not counted', said);
+    await hp.goto(`${APP}/sites/${siteId}/settings`);
+    ok((await hp.locator('.notice span').innerText()).startsWith('A view came from mirror.example') && await hp.locator('.notice #ignore').isVisible(), 'its note has Ignore');
+    await shot(hp, 'ignore-note-dpr1');
+    await Promise.all([hp.waitForNavigation(), hp.click('#ignore')]);
+    ok(new URL(hp.url()).hash === '#setup-section' && await hp.locator('#setup-said').innerText() === 'That host is ignored: its views are no longer noted here.' &&
+      await hp.locator('.notice').count() === 0, 'Ignore drops the note, and says so in its place', hp.url());
+    ok((await hp.locator('#ignored .list .row').allInnerTexts()).join() === 'mirror.example' && await hp.locator('#remove-ignored').isDisabled(),
+      'the ignored host is listed, its Remove waiting for a choice');
+    await shot(hp, 'ignored-dpr1');
+    ok(await lastSaid('http://mirror.example/more') === "not this site's page", 'its next view is refused as before', said);
+    await hp.goto(`${APP}/sites/${siteId}/settings`);
+    ok(await hp.locator('.notice').count() === 0, 'and not noted');
+    await hp.click('#ignored .list label.row');
+    ok(await hp.locator('#remove-ignored').isEnabled() && await hp.locator('#remove-host').isDisabled(), "choosing it wakes the list's own Remove only");
+    await Promise.all([hp.waitForNavigation(), hp.click('#remove-ignored')]);
+    ok(new URL(hp.url()).hash === '#ignored' && await hp.locator('#ignored-said').innerText() === "That host's views are noted again." &&
+      await hp.locator('#ignored .list').count() === 0, 'Remove takes it off the list', hp.url());
+    await lastSaid('http://mirror.example/again');
+    await hp.goto(`${APP}/sites/${siteId}/settings`);
+    ok(await hp.locator('#ignore').count() === 1 && await hp.locator('#ignored').count() === 0, 'its views are noted again, and the empty list is gone');
+    await Promise.all([hp.waitForNavigation(), hp.click('#ignore')]);
+    // another host's note stays, for the checks at every scale below
+    await lastSaid('http://other.example/');
     ok(await addHost('*.shop.example') === 'The host counts now.' && (await hp.locator('.list label.row .note').innerText()) === 'Every subdomain', 'a *. host counts every subdomain');
     ok(hp.errors.length === 0 && blog.page.errors.length === 0, 'no script errors with hosts', [hp.errors, blog.page.errors]);
     await blog.ctx.close();
@@ -339,7 +367,14 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
       await c.page.goto(`${APP}/sites/${siteId}/settings`);
       ok(await c.page.locator('#setup.ok').count() === 1 && await noScroll(c.page), `${tag}: the settings show the green check and do not scroll sideways`);
       const heights = await c.page.locator('#settings .btn:not(.tbox)').evaluateAll(bs => bs.map(x => Math.round(x.getBoundingClientRect().height)));
-      ok(heights.length === 6 && heights.every(h => h === 20), `${tag}: settings buttons are 20px high`, heights);
+      ok(heights.length === 8 && heights.every(h => h === 20), `${tag}: settings buttons are 20px high`, heights);
+      // the note: its words, then Ignore at the right, inside the box
+      const note = await c.page.evaluate(() => {
+        const n = document.querySelector('.notice.ask'), b = n.querySelector('.btn'), t = n.querySelector('span');
+        const r = n.getBoundingClientRect(), br = b.getBoundingClientRect(), tr = t.getBoundingClientRect();
+        return { right: r.right - br.right, top: br.top - r.top, bottom: r.bottom - br.bottom, beside: br.left >= tr.right, text: t.textContent };
+      });
+      ok(note.text.startsWith('A view came from other.example') && note.right > 8 && note.top >= 6 && note.bottom >= 6, `${tag}: Ignore sits inside the note`, note);
       // the trail, in the exe documentation's toolbar: 33px, the trail 8px
       // down it, and on a phone the steps nearest this page only
       const trail = await c.page.evaluate(() => {
@@ -360,7 +395,7 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
       const whole = v => Math.abs(v - Math.round(v)) < 0.02;
       ok(big.done && whole(big.w / 88) && whole(big.x) && whole(big.y), `${tag}: the enlarged badge is on whole screen pixels`, big);
       const rows = await c.page.locator('.list .row').evaluateAll(rs => rs.map(x => Math.round(x.getBoundingClientRect().height)));
-      ok(rows.length === 2 && rows.every(h => h === (v.phone ? 24 : 18)), `${tag}: the hosts list has its rows at their height`, rows);
+      ok(rows.length === 3 && rows.every(h => h === (v.phone ? 24 : 18)), `${tag}: the hosts and ignored lists have their rows at their height`, rows);
       // the line keeps the room of its longest wording, so the check's turn
       // moves nothing — measured in DejaVu Sans, Verdana's width, which is
       // where an iPhone and Windows land in the font stack
@@ -376,6 +411,8 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
         'A view of shop.example was sent from translate.goog 59 min ago, and was not counted.']);
       ok(room.hs.every(h => h <= room.min), `${tag}: the line's room holds its wordings`, room);
       await shot(c.page, 'settings-' + tag);
+      await c.page.locator('#ignored').evaluate(x => x.scrollIntoView({ block: 'center' }));
+      await shot(c.page, 'settings-ignored-' + tag);
       await c.page.locator('#badge').evaluate(x => x.scrollIntoView({ block: 'end' }));
       await shot(c.page, 'settings-badge-' + tag);
       await c.ctx.close();

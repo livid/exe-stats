@@ -380,7 +380,7 @@ func TestSetupCheck(t *testing.T) {
 		t.Fatalf("after a view: %+v", v)
 	}
 	if page := settings(); !strings.Contains(page, `<div class="setup ok" id="setup"`) ||
-		!strings.Contains(page, `<p class="notice">A view of shop.example was sent from evil.example just now, and was not counted.</p>`) {
+		!strings.Contains(page, `<span>A view of shop.example was sent from evil.example just now, and was not counted.</span><input type="hidden" name="host" value="evil.example">`) {
 		t.Fatalf("the page after a view:\n%s", page)
 	}
 
@@ -550,6 +550,128 @@ func TestHosts(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := app2.sites[shop].site.Hosts; len(got) != maxHosts || got[0] != "*.docs.example" || got[1] != "mirror.example.net" {
+		t.Fatalf("read back: %v", got)
+	}
+}
+
+// Ignore: a note that names a host has Ignore, and an ignored host's
+// views are refused without a note from then on, until it is taken off
+// the list or listed as a host.
+func TestIgnore(t *testing.T) {
+	h := newHarness(t)
+	w := newWallet()
+	h.bal.set(w.addr, 10000)
+	h.signIn(w)
+	h.form(w, "/v1/sites", url.Values{"domain": {"shop.example"}})
+	shop := h.siteID(w, "shop.example")
+	settings := "/sites/" + shop + "/settings"
+	page := func() string { return h.do(w, "GET", settings, "", nil).Body.String() }
+	ignore := func(host string) string { return h.form(w, "/v1/sites/"+shop+"/ignore", url.Values{"host": {host}}) }
+	unignore := func(host string) string {
+		return h.form(w, "/v1/sites/"+shop+"/ignored/remove", url.Values{"host": {host}})
+	}
+	const button = `<button class="btn" id="ignore">Ignore</button>`
+	h.beacon(shop, "https://shop.example/", "", "https://shop.example")
+
+	h.beacon(shop, "https://sunp.example.org/tea", "", "https://sunp.example.org")
+	if p := page(); !strings.Contains(p, `<span>A view came from sunp.example.org just now and was not counted: it is not one of the hosts below.</span>`+
+		`<input type="hidden" name="host" value="sunp.example.org">`+button) || strings.Contains(p, `id="ignored"`) {
+		t.Fatalf("the note has no Ignore:\n%s", p)
+	}
+	if got := ignore("sunp.example.org"); got != settings+"?m=ignored#setup-section" {
+		t.Fatalf("ignore: %s", got)
+	}
+	if p := h.do(w, "GET", settings+"?m=ignored", "", nil).Body.String(); strings.Contains(p, `class="notice`) ||
+		!strings.Contains(p, `id="setup-said" role="status">That host is ignored: its views are no longer noted here.</p>`) ||
+		!strings.Contains(p, `<section id="ignored">`) || !strings.Contains(p, `<input type="radio" name="host" value="sunp.example.org">`) {
+		t.Fatalf("after Ignore:\n%s", p)
+	}
+	// refused as before, and not noted
+	if got := h.beacon(shop, "https://www.sunp.example.org/more", "", "https://www.sunp.example.org"); got != beaconForeign {
+		t.Fatalf("an ignored host's view: %q", got)
+	}
+	if strings.Contains(page(), `class="notice`) {
+		t.Fatal("an ignored host is noted again")
+	}
+	// as the host of another origin, too; and a host not ignored still is
+	h.beacon(shop, "https://shop.example/", "", "https://sunp.example.org")
+	if strings.Contains(page(), `class="notice`) {
+		t.Fatal("an ignored origin is noted")
+	}
+	h.beacon(shop, "https://staging.example/", "", "https://staging.example")
+	if !strings.Contains(page(), `value="staging.example">`+button) {
+		t.Fatal("another host is not noted")
+	}
+
+	for in, want := range map[string]string{
+		"www.shop.example": "?e=ignorecounts#setup-section", // the site's own
+		"a b":              "?e=ignorehost#setup-section",
+		"":                 "?e=ignorehost#setup-section",
+		"Sunp.Example.org": "?m=ignored#setup-section", // already: nothing changes
+	} {
+		if got := ignore(in); got != settings+want {
+			t.Errorf("ignore %q: %s, want %s", in, got, want)
+		}
+	}
+	// no Ignore where a note names no host, or one that counts
+	h.beacon(shop, "https://shop.example/", "", "null")
+	if p := page(); !strings.Contains(p, `<p class="notice">A view of shop.example was sent from another origin just now, and was not counted.</p>`) {
+		t.Fatalf("an unreadable origin:\n%s", p)
+	}
+	h.form(w, "/v1/sites/"+shop+"/hosts", url.Values{"host": {"blog.shop.example"}})
+	h.beacon(shop, "https://blog.shop.example/", "", "https://shop.example")
+	if p := page(); !strings.Contains(p, `<p class="notice">A view of blog.shop.example was sent from shop.example just now, and was not counted.</p>`) {
+		t.Fatalf("an origin that counts:\n%s", p)
+	}
+
+	// taken off: noted again
+	if got := unignore("nobody.example"); got != settings+"?e=noignored#ignored" {
+		t.Fatalf("unignore a stranger: %s", got)
+	}
+	if got := unignore("sunp.example.org"); got != settings+"?m=unignored#ignored" {
+		t.Fatalf("unignore: %s", got)
+	}
+	if p := h.do(w, "GET", settings+"?m=unignored", "", nil).Body.String(); !strings.Contains(p, `<section id="ignored">`) ||
+		strings.Contains(p, `name="host" value="sunp.example.org"`) || !strings.Contains(p, `id="ignored-said" role="status">That host&#39;s views are noted again.</p>`) {
+		t.Fatalf("after unignore:\n%s", p)
+	}
+	if strings.Contains(page(), `<section id="ignored">`) {
+		t.Fatal("an empty list stays without its word")
+	}
+	h.beacon(shop, "https://sunp.example.org/", "", "https://sunp.example.org")
+	if !strings.Contains(page(), `value="sunp.example.org">`+button) {
+		t.Fatal("a host taken off is not noted")
+	}
+
+	// listing an ignored host takes it off the list: it is the site's own
+	ignore("sunp.example.org")
+	ignore("mirror.example")
+	h.form(w, "/v1/sites/"+shop+"/hosts", url.Values{"host": {"*.example.org"}})
+	if got := h.app.sites[shop].site.Ignored; len(got) != 1 || got[0] != "mirror.example" {
+		t.Fatalf("after listing *.example.org: %v", got)
+	}
+
+	// another wallet cannot touch them
+	poor := newWallet()
+	h.signIn(poor)
+	if got := h.form(poor, "/v1/sites/"+shop+"/ignore", url.Values{"host": {"evil.example"}}); got != "/?e=gone" {
+		t.Fatalf("a stranger's ignore: %s", got)
+	}
+
+	// a site ignores at most maxIgnored
+	for i := 1; i < maxIgnored; i++ {
+		ignore(fmt.Sprintf("m%d.example", i))
+	}
+	if got := ignore("one-more.example"); got != settings+"?e=ignoremax#setup-section" {
+		t.Fatalf("past the most: %s", got)
+	}
+
+	// written down: a new process reads them back
+	app2, err := newApp(h.app.cfg, h.app.store.db, h.bal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := app2.sites[shop].site.Ignored; len(got) != maxIgnored || got[0] != "mirror.example" || got[1] != "m1.example" {
 		t.Fatalf("read back: %v", got)
 	}
 }

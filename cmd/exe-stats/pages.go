@@ -40,6 +40,8 @@ var notes = map[string]string{
 	"hostremoved": "That host no longer counts.",
 	"badgeon":     "The badge is on: any page may show it.",
 	"badgeoff":    "The badge is off. A page that still links it shows no picture there.",
+	"ignored":     "That host is ignored: its views are no longer noted here.",
+	"unignored":   "That host's views are noted again.",
 }
 
 var faults = map[string]string{
@@ -54,19 +56,31 @@ var faults = map[string]string{
 	"failed":  "That did not work. Nothing has changed.",
 	"foreign": "Press the button on this site's own page.",
 	// a site's settings
-	"host":        "That does not read as a host: type it like blog.example.com, or *.example.com.",
-	"counts":      "That host counts already.",
-	"hostmax":     "A site lists at most 20 hosts.",
-	"nohost":      "Choose a host in the list first.",
-	"style":       "That is not one of the badge's styles.",
-	"badgefailed": "That did not work. Nothing has changed.",
+	"host":           "That does not read as a host: type it like blog.example.com, or *.example.com.",
+	"counts":         "That host counts already.",
+	"hostmax":        "A site lists at most 20 hosts.",
+	"nohost":         "Choose a host in the list first.",
+	"style":          "That is not one of the badge's styles.",
+	"badgefailed":    "That did not work. Nothing has changed.",
+	"ignorehost":     "That does not read as a host.",
+	"ignorecounts":   "That host counts: its pages are the site's own.",
+	"ignoremax":      "A site ignores at most 20 hosts. Take one off the list below first.",
+	"ignorefailed":   "That did not work. Nothing has changed.",
+	"noignored":      "Choose a host in the list first.",
+	"unignorefailed": "That did not work. Nothing has changed.",
 }
 
 // saidIn is the settings section a word answers, by its word: the
-// badge's own, and the hosts' for the rest.
+// badge's own, the setup's for the note's Ignore, the ignored list's,
+// and the hosts' for the rest.
 func saidIn(word string) string {
-	if strings.HasPrefix(word, "badge") || word == "style" {
+	switch {
+	case strings.HasPrefix(word, "badge") || word == "style":
 		return "badge"
+	case strings.HasPrefix(word, "unignore") || word == "noignored":
+		return "ignored"
+	case strings.HasPrefix(word, "ignore"):
+		return "setup"
 	}
 	return "hosts"
 }
