@@ -164,6 +164,15 @@ There is one grace in `grace_every_days`: a second drop inside that
 window takes effect at the check that sees it. Nothing counted is
 deleted in any state; only the owner's Remove deletes a site.
 
+**The badge.** `/badge.gif` is an 88×31 animated button for other pages
+to link here with, the web's first analytics in miniature: a hit
+counter's wheels turning over a day's readers while the day's bars fill,
+until midnight sends them back to nought. `/badge/` shows it and hands
+out the HTML and the Markdown that link it, naming the server by its
+`origin`. `cmd/exe-stats/badge.py` draws it pixel by pixel (Pillow):
+`python3 cmd/exe-stats/badge.py sheet.png` redraws `badge.gif` and
+writes every frame at 4× to look at.
+
 **Checking it.** `go test ./...` covers the rules, the sign-in and the
 collect address. `cmd/exe-stats/e2e/e2e.js` drives the whole flow in
 headless Chromium against a scratch server — a mock wallet signing with

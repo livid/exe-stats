@@ -1,0 +1,108 @@
+{{/* The badge's page, /badge/, in the chrome of the server's other
+     page (pages.html): the badge at its own size and enlarged, and the
+     HTML and the Markdown that link here with it, each in a sunken field
+     with a button that copies it. */}}
+{{define "badge"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Badge · {{.Host}}</title>
+<meta name="description" content="An animated 88×31 button to link to Stats with, the kind a row of which ended every page of the late-nineties web.">
+<meta name="theme-color" content="#dddddd">
+<script>
+// the enlarged badge takes a whole number of screen pixels for each of
+// its own, near three CSS pixels, so at 125 or 150 percent no column of
+// it comes out wider than the next; its size is set before the first
+// paint, rounded up to the 1/64px layout keeps, so nothing moves
+function badgeFit() {
+  const r = devicePixelRatio || 1, k = Math.max(1, Math.round(3 * r));
+  document.documentElement.style.setProperty("--bw", Math.ceil(88 * k / r * 64) / 64 + "px");
+}
+badgeFit();
+</script>
+<style>{{chrome}}
+.window { max-width: 560px; }
+.body { padding: 12px 12px 0; }
+h1 { margin: 0 0 8px; font-size: 12px; line-height: 16px; }
+h1 small { display: block; font-size: 12px; font-weight: normal; }
+p { margin: 0 0 8px; line-height: 16px; }
+button.btn { font-family: inherit; cursor: default; margin: 0; }
+.statusbar { min-height: 22px; }
+/* a row of buttons: at the lower right, 12px apart */
+.buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px 12px; margin: 12px 0; min-height: 20px; }
+/* the badge at its own size and enlarged: side by side, or stacked on a
+   phone; the enlarged one gives way rather than overflow a narrow one */
+.badges { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: center; gap: 12px 32px; margin: 12px 0 14px; }
+.badges figure { margin: 0; min-width: 0; }
+.badges img { display: block; margin: 0 auto 6px; image-rendering: pixelated; }
+.badges .big { width: var(--bw, 264px); max-width: 100%; height: auto; }
+.badges figcaption { text-align: center; font-size: 11px; line-height: 14px; color: #555; }
+label { display: block; margin: 0 0 4px; font-weight: bold; line-height: 16px; }
+.field + label { margin-top: 10px; }
+/* a text field: white, sunken, 20px */
+.field { display: block; box-sizing: border-box; width: 100%; height: 20px; margin: 0; padding: 2px 5px; background: #fff; color: #262626;
+  border: 1px solid #262626; border-radius: 0; box-shadow: -1px -1px 0 #999, 1px 1px 0 #fff;
+  font: 12px/14px "Charcoal", "Chicago", "Geneva", "Lucida Grande", "Lucida Sans", Verdana, sans-serif; -webkit-appearance: none; appearance: none; }
+.field:focus { outline: 2px solid #9999fe; outline-offset: 0; }
+.field.snip { font: 11px/14px Monaco, "Courier New", monospace; }
+@media (pointer: coarse) { .field { font-size: 16px; height: 24px; } .field.snip { font-size: 16px; } }
+</style>
+</head>
+<body>
+<div class="window" id="badge">
+  <div class="titlebar"><a class="tbox" href="/" title="Stats" aria-label="Stats"></a><span class="stripe"></span><span class="title">Badge</span><span class="stripe"></span></div>
+  <div class="frame">
+    <div class="body">
+      <h1>Link to Stats<small>An 88×31 button for your page.</small></h1>
+      <p>Before there were dashboards, a page counted its own readers: a row of number wheels at its foot, beside a row of buttons like this one, each a link to something its author made or liked. This button is a counter too. Its wheels count a day's readers while the day's bars fill, midnight turns them back to nought, and a click brings a reader to <a href="/">Stats</a>.</p>
+      <div class="badges">
+        <figure><img src="/badge.gif" width="88" height="31" alt="{{.Alt}}"><figcaption>Its own size</figcaption></figure>
+        <figure><img class="big" src="/badge.gif" width="264" height="93" alt="{{.Alt}}, enlarged"><figcaption>Enlarged</figcaption></figure>
+      </div>
+      <p>Put it in a footer, a sidebar or a README. Paste one of these as it is, or <a href="/badge.gif" download="exe-stats-badge.gif">save the GIF</a> and serve it yourself.</p>
+      <label for="html">HTML</label>
+      <input class="field snip" id="html" readonly value="{{.HTML}}">
+      <label for="md">Markdown</label>
+      <input class="field snip" id="md" readonly value="{{.MD}}">
+      <div class="buttons">
+        <button class="btn copy" type="button" data-for="md">Copy Markdown</button>
+        <button class="btn copy" type="button" data-for="html">Copy HTML</button>
+      </div>
+    </div>
+    <div class="statusbar"><span id="said" role="status">GIF, 88 × 31, {{.Frames}} frames, {{.Size}}</span></div>
+  </div>
+</div>
+<script>
+// The enlarged badge kept on the screen's own pixels; and Copy, which
+// puts a snippet on the clipboard and says so on the status line, or
+// where the clipboard is not offered leaves the snippet selected for the
+// reader's own copy.
+(() => {
+  // and it stands on whole screen pixels: where layout leaves it between
+  // two (an odd CSS pixel at 150 percent), it is moved the fraction onto
+  // the grid, or its outermost rows blend with the page; a zoom fits both
+  // again, since it changes the screen pixels a CSS pixel holds
+  const big = document.querySelector(".big");
+  const grid = () => {
+    big.style.translate = "";
+    const b = big.getBoundingClientRect(), d = devicePixelRatio || 1;
+    const off = v => (Math.round(v * d) - v * d) / d;
+    big.style.translate = off(b.left + scrollX) + "px " + off(b.top + scrollY) + "px";
+  };
+  grid();
+  addEventListener("resize", () => { badgeFit(); grid(); });
+
+  const said = document.getElementById("said");
+  for (const f of document.querySelectorAll(".snip")) f.addEventListener("focus", () => f.select());
+  for (const b of document.querySelectorAll(".copy")) b.addEventListener("click", () => {
+    const f = document.getElementById(b.dataset.for), name = f.id === "html" ? "The HTML" : "The Markdown";
+    f.select();
+    const left = () => { said.textContent = name + " is selected for you to copy."; };
+    if (!navigator.clipboard || !navigator.clipboard.writeText) return left();
+    navigator.clipboard.writeText(f.value).then(() => { said.textContent = name + " is on your clipboard."; }, left);
+  });
+})();
+</script>
+</body>
+</html>{{end}}

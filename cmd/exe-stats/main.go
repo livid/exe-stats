@@ -153,7 +153,10 @@ func newApp(cfg Config, appDB *sql.DB, rpc Balancer) (*App, error) {
 		}
 		a.originHost, a.secure = u.Host, u.Scheme == "https"
 	}
-	if a.tmpl, err = template.New("pages").Funcs(stats.Funcs()).Parse(pagesHTML); err != nil {
+	if a.tmpl, err = template.New("pages").Funcs(stats.Funcs()).Parse(pagesHTML); err == nil {
+		_, err = a.tmpl.Parse(badgeHTML)
+	}
+	if err != nil {
 		return nil, err
 	}
 	all, err := st.allSites()
@@ -170,6 +173,9 @@ func (a *App) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", a.handleHome)
 	mux.HandleFunc("GET /js/s.js", a.handleScript)
+	mux.HandleFunc("GET /badge.gif", a.handleBadgeGIF)
+	mux.HandleFunc("GET /badge/{$}", a.handleBadgePage)
+	mux.Handle("GET /badge", http.RedirectHandler("/badge/", http.StatusMovedPermanently))
 	mux.HandleFunc("/e", a.handleCollect)
 	mux.HandleFunc("GET /v1/challenge", a.handleChallenge)
 	mux.HandleFunc("POST /v1/signin", a.handleSignIn)

@@ -64,6 +64,9 @@ dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .add { display: flex; gap: 12px; align-items: center; margin: 0 0 8px; }
 .add .field { flex: 1; min-width: 0; }
 @media (pointer: coarse) { .field { font-size: 16px; height: 24px; } .field.snip { font-size: 16px; } }
+/* the link to the badge, on the page's last status line; on a phone the
+   mint fills that line, and the link stays off it rather than break it */
+@media (max-width: 419px) { .badgelink { display: none; } }
 </style>
 </head>
 <body>
@@ -228,6 +231,6 @@ dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
       </table>
       <p class="fine">A balance that falls under its tier keeps counting for {{.GraceDays}} days. A first month over the cap is counted up to {{.OverFactor}} times the cap. Nothing counted is deleted for either.</p>
     </div>
-    <div class="statusbar"><span>Mint <code>{{.Mint}}</code></span></div>
+    <div class="statusbar"><span>Mint <code>{{.Mint}}</code></span><a class="badgelink" href="/badge/">Badge</a></div>
   </div>
 </div>{{end}}
