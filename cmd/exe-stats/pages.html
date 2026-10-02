@@ -12,6 +12,7 @@
 <meta name="description" content="See who reads your website: simple, private visitor stats from one line of code. No cookies, no IP addresses stored. For {{.Token}} holders.">
 <meta name="theme-color" content="#dddddd">
 {{template "icons"}}
+{{ownsite}}
 <style>{{chrome}}{{template "style"}}</style>
 </head>
 <body>
@@ -564,6 +565,7 @@ const pix = (() => {
 <title>{{.Domain}} Settings · {{.Host}}</title>
 <meta name="theme-color" content="#dddddd">
 {{template "icons"}}
+{{ownsite}}
 {{if .Badge}}{{template "badgefit"}}{{end}}
 <style>{{chrome}}{{popup}}{{template "style"}}{{template "badgecss"}}
 h2 { margin: 0 0 8px; font-size: 12px; line-height: 16px; }

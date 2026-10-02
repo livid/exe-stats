@@ -1029,3 +1029,42 @@ func TestTrouble(t *testing.T) {
 		t.Fatalf("no tier: %q", got)
 	}
 }
+
+// TestOwnSite: the server's own site's snippet is in the head of every
+// page it draws when the config names one, and nowhere when it does not.
+func TestOwnSite(t *testing.T) {
+	h := newHarness(t)
+	w := newWallet()
+	h.bal.set(w.addr, 10000)
+	h.signIn(w)
+	h.form(w, "/v1/sites", url.Values{"domain": {"shop.example"}})
+	shop := h.siteID(w, "shop.example")
+	pages := []string{"/", "/badge/", "/sites/" + shop + "/settings"}
+	for _, p := range pages {
+		if head, _, _ := strings.Cut(h.do(w, "GET", p, "", nil).Body.String(), "</head>"); strings.Contains(head, "data-site=") {
+			t.Fatalf("%s carries a snippet with no own_site", p)
+		}
+	}
+	h.app.cfg.OwnSite = shop
+	want := `<script defer data-site="` + shop + `" src="https://stats.example/js/s.js"></script>`
+	for _, w := range []*wallet{w, nil} {
+		for _, p := range pages {
+			body := h.do(w, "GET", p, "", nil).Body.String()
+			head, _, _ := strings.Cut(body, "</head>")
+			if w == nil && p != "/" && p != "/badge/" {
+				continue // the settings are the owner's
+			}
+			if !strings.Contains(head, want) {
+				t.Errorf("%s (signed in %v): no own snippet in the head", p, w != nil)
+			}
+		}
+	}
+	db, err := openDB(filepath.Join(t.TempDir(), "app.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := newApp(Config{Data: t.TempDir(), OwnSite: "stats.v2core.com"}, db, h.bal); err == nil {
+		t.Fatal("an own_site that is no site id was taken")
+	}
+}

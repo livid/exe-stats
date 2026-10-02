@@ -61,6 +61,10 @@ type Config struct {
 	// change none of it (admin.go). As the hub's admins are, they are the
 	// config's to name.
 	Admins []string `json:"admins"`
+	// OwnSite is a site of this server's own, counted here like any other
+	// (225752b23eea is stats.v2core.com): its snippet goes in the head of
+	// every page the server draws. Empty: the pages carry none.
+	OwnSite string `json:"own_site"`
 }
 
 func defaults(c Config) Config {
@@ -172,7 +176,10 @@ func newApp(cfg Config, appDB *sql.DB, rpc Balancer) (*App, error) {
 		}
 		a.originHost, a.secure = u.Host, u.Scheme == "https"
 	}
-	if a.tmpl, err = template.New("pages").Funcs(stats.Funcs()).Parse(pagesHTML); err == nil {
+	if cfg.OwnSite != "" && !siteIDRe.MatchString(cfg.OwnSite) {
+		return nil, fmt.Errorf("config: own_site %q is not a site id", cfg.OwnSite)
+	}
+	if a.tmpl, err = template.New("pages").Funcs(stats.Funcs()).Funcs(template.FuncMap{"ownsite": a.ownSnippet}).Parse(pagesHTML); err == nil {
 		_, err = a.tmpl.Parse(badgeHTML)
 	}
 	if err != nil {

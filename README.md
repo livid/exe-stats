@@ -218,6 +218,11 @@ the server issued for that address, never a transaction; the address is
 the account. A session is an `HttpOnly`, `SameSite=Lax` cookie whose hash,
 not its value, is stored.
 
+**Its own site.** `own_site` names a site of the server's own, added
+and counted here like any other: its snippet goes in the head of every
+page the server draws, so the server's own readers are on that site's
+desk.
+
 **Admins** are the wallet addresses the config's `admins` names, as the
 hub's are. An admin's own page lists every account that holds a tier or
 has a site, the month's busiest first, and `/?as=<address>` is that

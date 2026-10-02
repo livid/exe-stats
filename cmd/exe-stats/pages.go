@@ -2,6 +2,9 @@ package main
 
 import (
 	_ "embed"
+	"html"
+	"html/template"
+	"regexp"
 
 	"fmt"
 	"net/http"
@@ -312,6 +315,22 @@ func (a *App) originOf(r *http.Request) string {
 		return strings.TrimSuffix(a.cfg.Origin, "/")
 	}
 	return "http://" + r.Host
+}
+
+// siteIDRe is a site's id: twelve hex digits (addSite).
+var siteIDRe = regexp.MustCompile(`^[0-9a-f]{12}$`)
+
+// ownSnippet is the snippet of the server's own site (Config.OwnSite),
+// for the head of its pages; nothing when there is none.
+func (a *App) ownSnippet() template.HTML {
+	if a.cfg.OwnSite == "" {
+		return ""
+	}
+	src := "/js/s.js"
+	if a.cfg.Origin != "" {
+		src = strings.TrimSuffix(a.cfg.Origin, "/") + src
+	}
+	return template.HTML(`<script defer data-site="` + a.cfg.OwnSite + `" src="` + html.EscapeString(src) + `"></script>`)
 }
 
 func (a *App) snippet(r *http.Request, id string) string {
