@@ -198,7 +198,7 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     await page.goto(APP + '/');
     ok(await page.locator('#sites .snip, #sites .copy').count() === 0, 'the Sites window carries no snippet');
     ok((await page.locator('.site .name').innerText()) === 'shop.example', 'the domain is read out of a pasted address');
-    ok((await page.locator('.site .st').innerText()) === 'Counting', 'the site counts');
+    ok((await page.locator('.site .st').innerText()).trim() === '· Counting', 'the site counts, said after its day', await page.locator('.site .st').innerText());
     ok((await page.locator('.site .tv').innerText()) === '0 views today · 0 online', "the site's day is empty yet, and nobody is on it", await page.locator('.site .tv').innerText());
     for (const sel of ['.add .field', '.add .btn', '.site .buttons .btn']) {
       const b = await box(page, sel);
@@ -253,7 +253,7 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
 
     // ---- the Sites window, left open, counts the views as they come ----
     const liveDay = await page.waitForFunction(() => document.querySelector('.site .tv').textContent === '3 views today · 1 online'
-      && document.querySelector('.site .bars i.now').getBoundingClientRect().height === 24
+      && getComputedStyle(document.querySelector('.site .bars i.now'), '::after').height === '40px'
       && /^3 of /.test(document.getElementById('used').parentElement.textContent), null, { timeout: 10000 }).then(() => true).catch(() => false);
     ok(liveDay, "the open page's day, its bar and the month's count follow the views without a reload",
       await page.evaluate(() => [document.querySelector('.site .tv').textContent, document.getElementById('used').textContent]));
@@ -262,11 +262,22 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     await page.reload();
     const day = await page.evaluate(() => {
       const bars = [...document.querySelectorAll('.site .bars i')], b = document.querySelector('.site .bars').getBoundingClientRect();
-      return { n: bars.length, now: bars.filter(x => x.className === 'now').map(x => x.getBoundingClientRect().height),
-        to: bars.filter(x => x.className === 'to').length, w: b.width, h: b.height, tv: document.querySelector('.site .tv').textContent };
+      const row = document.querySelector('.site').getBoundingClientRect(), line = document.querySelector('.site .sline').getBoundingClientRect();
+      const tv = document.querySelector('.site .tv').getBoundingClientRect(), st = document.querySelector('.site .st').getBoundingClientRect();
+      const after = x => getComputedStyle(x, '::after'), before = x => getComputedStyle(x, '::before');
+      return { n: bars.length, now: bars.filter(x => x.className === 'now').map(x => [after(x).height, after(x).borderTopColor, after(x).backgroundColor]),
+        past: bars.filter(x => !x.className).map(x => [after(x).height, after(x).borderTopColor]).slice(0, 1),
+        ghost: [before(bars[0]).backgroundColor, before(bars[0]).height],
+        to: bars.filter(x => x.className === 'to').length, w: b.width, rw: row.width, h: b.height, floor: getComputedStyle(document.querySelector('.site .bars')).borderBottom,
+        first: bars[0].getBoundingClientRect().left - b.left, last: b.right - bars[bars.length - 1].getBoundingClientRect().right,
+        oneLine: Math.round(line.height) === 16 && Math.round(tv.top) === Math.round(st.top) && st.right <= line.right + 0.5, tv: document.querySelector('.site .tv').textContent };
     });
-    ok(day.n >= 23 && day.n <= 25 && day.now.length === 1 && day.now[0] === 24, "the day is a bar an hour, this hour's the busiest and still filling", day);
-    ok(day.tv === '3 views today · 1 online' && Math.round(day.w) === 8 * day.n + 4 && Math.round(day.h) === 30, 'its views and who is on it in words, and the box is the whole day wide', day);
+    ok(day.n >= 23 && day.n <= 25 && day.now.length === 1 && day.now[0][0] === '40px' && day.now[0][1] === 'rgb(255, 102, 0)' && day.now[0][2] === 'rgb(255, 204, 153)',
+      "the day is a bar an hour, this hour's the busiest and still filling, in the hero's orange", day);
+    ok(day.ghost[0] === 'rgb(235, 235, 255)' && day.ghost[1] === '0px', 'yesterday stands pale behind each hour: empty, as nothing came yesterday', day.ghost);
+    ok(day.tv === '3 views today · 1 online' && day.oneLine, "its views and who is on it in words, on the name's line before Counting", day);
+    ok(Math.round(day.w) === Math.round(day.rw) && day.first === 0 && day.last === 0 && Math.round(day.h) === 41 && day.floor.startsWith('1px solid'),
+      'the day is the row wide, 40px over a floor line', day);
     ok(await page.locator('.site .bars').getAttribute('href') === `/sites/${siteId}` && await page.locator('.site .bars').evaluate(e => getComputedStyle(e).cursor) === 'pointer',
       'the day is a press to the desk, and the pointer says so');
     const btnCursors = await page.locator('.site .buttons .btn').evaluateAll(bs => bs.map(b => getComputedStyle(b).cursor));
@@ -402,7 +413,9 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
       const tops = await c.page.locator('.site .buttons .btn').evaluateAll(bs => bs.filter(x => x.offsetParent).map(x => Math.round(x.getBoundingClientRect().top)));
       ok(tops.length === 2 && tops.every(t => t === tops[0]), `${tag}: a site's buttons are one row`, tops);
       const bars = await c.page.evaluate(() => [...document.querySelectorAll('.site .bars i')].map(x => x.getBoundingClientRect().width));
-      ok(bars.length > 0 && bars.every(w => w === 6), `${tag}: a site's bars are 6px wide`, bars.slice(0, 3));
+      ok(bars.length > 0 && bars.every(w => w === bars[0]) && bars[0] >= 6 && bars[0] % 2 === 0, `${tag}: a site's bars are one width, in whole 2px steps`, bars.slice(0, 3));
+      const words = await c.page.evaluate(() => { const l = document.querySelector('.site .sline').getBoundingClientRect(), t = document.querySelector('.site .tv').getBoundingClientRect(); return [t.left >= l.left - 0.5 && t.right <= l.right + 0.5, Math.round(l.height)]; });
+      ok(words[0] && words[1] === (v.phone ? 36 : 16), `${tag}: the day's words fit the row's line (under the name on a phone)`, words);
       await shot(c.page, 'account-' + tag);
       await c.page.goto(`${APP}/sites/${siteId}/settings`);
       ok(await c.page.locator('#setup.ok').count() === 1 && await noScroll(c.page), `${tag}: the settings show the green check and do not scroll sideways`);

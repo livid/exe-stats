@@ -41,8 +41,8 @@
   <div class="frame">
     <div class="body">
       {{range .Sites}}<div class="site" id="s-{{.ID}}">
-        <div class="sline">{{if .Icon}}<img class="ico" src="/sites/{{.ID}}/icon?v={{.Stamp}}" width="16" height="16" alt="">{{end}}<a class="name" href="/sites/{{.ID}}">{{.Domain}}</a><span class="st">{{if .Counting}}Counting{{else}}Resting{{end}}</span></div>
-        <div class="today"><a class="bars" href="/sites/{{.ID}}" aria-label="The desk of {{.Domain}}. Today, a bar an hour: {{.Today}}">{{range .Bars}}<i{{with .Class}} class="{{.}}"{{end}} style="height: {{.H}}px"{{with .Title}} title="{{.}}"{{end}}></i>{{end}}</a><span class="tv">{{.Today}}</span></div>
+        <div class="sline">{{if .Icon}}<img class="ico" src="/sites/{{.ID}}/icon?v={{.Stamp}}" width="16" height="16" alt="">{{end}}<a class="name" href="/sites/{{.ID}}">{{.Domain}}</a><span class="tv">{{.Today}}</span><span class="st"><span class="sep"> · </span>{{if .Counting}}Counting{{else}}Resting{{end}}</span></div>
+        <a class="bars" href="/sites/{{.ID}}" style="--n: {{len .Bars}}" aria-label="The desk of {{.Domain}}. Today, a bar an hour over yesterday's: {{.Today}}">{{range .Bars}}<i{{with .Class}} class="{{.}}"{{end}} style="--t: {{.H}}px; --y: {{.Y}}px"{{with .Title}} title="{{.}}"{{end}}></i>{{end}}</a>
         <div class="buttons">
           {{if not .Counting}}<form method="post" action="/v1/sites/{{.ID}}/pick"><button class="btn">Count This One</button></form>{{end}}
           <a class="btn" href="/sites/{{.ID}}/settings">Settings…</a>
@@ -100,9 +100,11 @@
       box.setAttribute("aria-label", box.getAttribute("aria-label").replace(/: .*$/, ": " + s.today));
       while (box.children.length < s.bars.length) box.appendChild(document.createElement("i"));
       while (box.children.length > s.bars.length) box.lastChild.remove();
+      box.style.setProperty("--n", s.bars.length);
       s.bars.forEach((b, i) => {
         const el = box.children[i];
-        el.style.height = b.h + "px";
+        el.style.setProperty("--t", b.h + "px");
+        el.style.setProperty("--y", b.y + "px");
         el.className = b.c || "";
         if (b.t) el.title = b.t; else el.removeAttribute("title");
       });
@@ -668,24 +670,37 @@ dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .field:disabled { background: #ddd; color: #777; }
 .field.snip { font: 11px/14px Monaco, "Courier New", monospace; }
 .site { padding: 0 0 4px; margin: 0 0 12px; border-bottom: 1px solid #bbb; }
-.site .sline { display: flex; align-items: baseline; gap: 12px; margin: 0 0 6px; line-height: 16px; }
+/* the row's line: the site at the left, and at the right one sentence of
+   its day and whether it counts. On a phone the day's words take a line
+   of their own under it: the width decides, not the words, so a count
+   that grows moves nothing */
+.site .sline { display: flex; align-items: baseline; margin: 0 0 8px; line-height: 16px; }
 .site .name { font-weight: bold; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.site .ico { flex: none; align-self: center; width: 16px; height: 16px; margin-right: -6px; }
-/* a site's day: a bar an hour in a sunken white box, 6px a bar, 2px
-   apart, the busiest 24px high; the hour still filling lighter, those to
-   come empty, so the box is the day's whole width all day */
-.site .today { display: flex; align-items: center; gap: 12px; margin: 0 0 8px; }
-.site .bars { flex: none; display: flex; align-items: flex-end; gap: 2px; box-sizing: content-box; height: 24px; padding: 2px; background: #fff;
-  text-decoration: none; cursor: pointer; /* a press opens the desk, as the name does: the hand says so */
-  border: 1px solid #262626; box-shadow: -1px -1px 0 #999, 1px 1px 0 #fff; }
-.site .bars i { display: block; flex: none; width: 6px; background: #666699; }
-.site .bars i.now { background: #9999cc; }
-.site .bars i.to { background: none; }
-.site .today .tv { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #555; line-height: 16px; }
-/* on a phone the words go under the day: beside it they would not fit,
-   and the width decides, not the words, so a count that grows moves nothing */
-@media (max-width: 479px) { .site .today { flex-direction: column; align-items: flex-start; gap: 4px; } }
-.site .st { margin-left: auto; color: #555; white-space: nowrap; }
+.site .ico { flex: none; align-self: center; width: 16px; height: 16px; margin-right: 6px; }
+.site .tv { margin-left: auto; padding-left: 12px; color: #555; white-space: nowrap; }
+.site .st { color: #555; white-space: pre; }
+@media (max-width: 479px) {
+  .site .sline { flex-wrap: wrap; row-gap: 4px; }
+  .site .tv { order: 1; flex-basis: 100%; min-width: 0; margin-left: 0; padding-left: 0; overflow: hidden; text-overflow: ellipsis; }
+  .site .st { margin-left: auto; padding-left: 12px; }
+  .site .st .sep { display: none; }
+}
+/* a site's day, drawn as the welcome's hero draws one (badge.py's
+   palette): a bar an hour across the row, standing on a floor line;
+   today's lavender under an indigo cap, the hour under way peach under
+   an orange one, and yesterday's same hour pale behind. The busiest
+   hour of the two days is 40px, and the bars are whole 2px steps wide,
+   the room left over shared between them */
+.site .bars { display: flex; justify-content: space-between; align-items: stretch; box-sizing: content-box; height: 40px; margin: 0 0 8px;
+  border-bottom: 1px solid #262626; container-type: inline-size; text-decoration: none;
+  cursor: pointer; /* a press opens the desk, as the name does: the hand says so */ }
+.site .bars i { position: relative; display: block; flex: none;
+  width: calc(100cqw / var(--n, 24) * .86); width: round(down, calc(100cqw / var(--n, 24) * .86), 2px); }
+.site .bars i::before, .site .bars i::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; box-sizing: border-box;
+  height: var(--h); border-top: min(2px, var(--h)) solid; }
+.site .bars i::before { --h: var(--y, 0px); background: #ebebff; border-color: #ccccff; }
+.site .bars i::after { --h: var(--t, 0px); background: #9999ff; border-color: #333399; }
+.site .bars i.now::after { background: #ffcc99; border-color: #ff6600; }
 .add { display: flex; gap: 12px; align-items: center; margin: 0 0 8px; }
 .add .field { flex: 1; min-width: 0; }
 @media (pointer: coarse) { .field { font-size: 16px; height: 24px; } .field.snip { font-size: 16px; } }

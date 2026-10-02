@@ -98,27 +98,35 @@ type siteRow struct {
 	Bars       []barView
 	Today      string // the day's views, in words
 	st         *stats.Stats
+	day        *siteDay // its day as last drawn, shared with the live streams (homelive.go)
 }
 
-// barView is an hour of a site's day on its row: a box chartH high at
-// the busiest hour, the hour still filling lighter, those to come empty.
-// The live stream (homelive.go) sends the same.
+// barView is an hour of a site's day on its row, drawn as the welcome's
+// hero draws a day: today's views over yesterday's in the same hour,
+// which stand pale behind them, on one scale whose busiest hour of the
+// two is chartH high, in whole 2px steps; the hour under way shows from
+// its first minute, its cap at least. The live stream (homelive.go)
+// sends the same.
 type barView struct {
-	H     int    `json:"h"`
+	H     int    `json:"h"`           // today, px
+	Y     int    `json:"y"`           // yesterday, px
 	Class string `json:"c,omitempty"` // "" | "now" | "to"
 	Title string `json:"t,omitempty"`
 }
 
-const chartH = 24
+const chartH = 40
 
-// today draws a site's day from its chart.
+// today draws a site's day, through the memo the live streams read.
 func (row *siteRow) today(now time.Time) error {
-	pts, err := row.st.Today(now)
+	d := row.day
+	if d == nil {
+		d = &siteDay{}
+	}
+	bars, line, err := dayOf(d, row.st, now)
 	if err != nil {
 		return err
 	}
-	bars, views := drawDay(pts)
-	row.Bars, row.Today = bars, dayLine(views, row.st.Online())
+	row.Bars, row.Today = bars, line
 	return nil
 }
 
@@ -128,12 +136,24 @@ func dayLine(views string, online int) string {
 	return views + " · " + commas(int64(online)) + " online"
 }
 
-// drawDay is a day's chart as its row draws it: its bars, and its views
-// in words.
-func drawDay(pts []stats.Point) ([]barView, string) {
+// drawDay is a day's chart as its row draws it, over the day before's:
+// its bars, and its views in words.
+func drawDay(pts, ago []stats.Point) ([]barView, string) {
+	// yesterday by the hour on the clock, so a day of 23 or 25 hours
+	// still stands over its neighbour's
+	clock := func(p stats.Point) int {
+		if t, err := time.Parse(time.RFC3339, p.T); err == nil {
+			return t.Hour()
+		}
+		return -1
+	}
+	before := map[int]int{}
+	for _, p := range ago {
+		before[clock(p)] += p.Pageviews
+	}
 	top, total, last := 0, 0, -1
 	for i, p := range pts {
-		top, total = max(top, p.Pageviews), total+p.Pageviews
+		top, total = max(top, p.Pageviews, before[clock(p)]), total+p.Pageviews
 		// an hour is placed by its middle, so in a zone off by half an
 		// hour the views of the last half hour stand in the next bar:
 		// that one is still filling, not to come
@@ -141,20 +161,28 @@ func drawDay(pts []stats.Point) ([]barView, string) {
 			last = i
 		}
 	}
+	px := func(n int) int { // whole 2px steps, rounded up
+		if top == 0 || n <= 0 {
+			return 0
+		}
+		return (n*(chartH/2) + top - 1) / top * 2
+	}
 	bars := make([]barView, 0, len(pts))
 	for i, p := range pts {
-		b := barView{}
+		y := before[clock(p)]
+		b := barView{H: px(p.Pageviews), Y: px(y)}
+		at := ""
 		if t, err := time.Parse(time.RFC3339, p.T); err == nil {
-			b.Title = t.Format("15:04") + " · " + viewWords(p.Pageviews)
+			at = t.Format("15:04") + " · "
 		}
 		switch {
 		case i == last:
-			b.Class = "now"
+			b.Class, b.H = "now", max(b.H, 2)
+			b.Title = at + viewWords(p.Pageviews) + " so far, " + commas(int64(y)) + " yesterday"
 		case i > last:
-			b.Class, b.Title = "to", ""
-		}
-		if top > 0 && p.Pageviews > 0 {
-			b.H = (p.Pageviews*chartH + top - 1) / top
+			b.Class, b.Title = "to", at+viewWords(y)+" yesterday"
+		default:
+			b.Title = at + viewWords(p.Pageviews) + ", " + commas(int64(y)) + " yesterday"
 		}
 		bars = append(bars, b)
 	}
@@ -340,7 +368,7 @@ func (a *App) fill(d *homeData, ac *acct, r *http.Request, now time.Time) {
 		if e := a.sites[s.ID]; e != nil {
 			row.Icon, row.Stamp = a.iconOf(e, now)
 			if st, err := a.statsOf(e); err == nil {
-				row.st = st
+				row.st, row.day = st, &e.day
 			} else {
 				a.log("home %s: %v", s.ID, err)
 			}

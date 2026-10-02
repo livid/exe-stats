@@ -965,4 +965,35 @@ func TestToday(t *testing.T) {
 	if views != store {
 		t.Fatalf("the chart holds %d views, the store %d", views, store)
 	}
+
+	// yesterday: the whole day an hour a point, none of it to come, the
+	// views the store holds for it — and the same again once it is kept
+	from, to := midnight(n.Year(), n.Month(), n.Day()-1, loc), midnight(n.Year(), n.Month(), n.Day(), loc)
+	ys, err := s.Yesterday(now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ys) < 23 || len(ys) > 25 || ys[0].T != from.Format(time.RFC3339) {
+		t.Fatalf("yesterday is %d points from %v", len(ys), ys[0].T)
+	}
+	views = 0
+	for _, p := range ys {
+		if p.Future {
+			t.Fatalf("an hour of yesterday still to come: %+v", p)
+		}
+		views += p.Pageviews
+	}
+	s.db.db.QueryRow(`SELECT COUNT(*) FROM hits WHERE bot = 0 AND ts >= ? AND ts < ?`, from.UnixMilli(), to.UnixMilli()).Scan(&store)
+	if views != store || store == 0 {
+		t.Fatalf("yesterday's chart holds %d views, the store %d", views, store)
+	}
+	again, err := s.Yesterday(now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	yb, _ := json.Marshal(ys)
+	ab, _ := json.Marshal(again)
+	if string(yb) != string(ab) {
+		t.Fatalf("yesterday read again %s, first %s", ab, yb)
+	}
 }

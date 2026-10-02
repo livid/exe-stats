@@ -39,16 +39,21 @@ type liveSite struct {
 }
 
 // siteDay is a site's day as last drawn — its bars, and its views and
-// who is online in words — for every stream that asks within a tick.
+// who is online in words — for every stream and page that asks within a
+// tick; and the day before, which the bars stand over.
 type siteDay struct {
-	mu    sync.Mutex
-	at    time.Time
-	bars  []barView
-	today string
+	mu     sync.Mutex
+	at     time.Time
+	bars   []barView
+	today  string
+	ago    []stats.Point // yesterday's chart
+	agoAt  time.Time     // read then
+	agoFor string        // for the day that began then (today's first hour)
 }
 
 // dayOf is a site's day, drawn afresh when the one held is older than
-// most of a tick.
+// most of a tick. Yesterday is over, so it is read again only a minute
+// on (a hit may still be on its way past midnight) or on a new day.
 func dayOf(d *siteDay, st *stats.Stats, now time.Time) ([]barView, string, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -59,7 +64,18 @@ func dayOf(d *siteDay, st *stats.Stats, now time.Time) ([]barView, string, error
 	if err != nil {
 		return nil, "", err
 	}
-	bars, views := drawDay(pts)
+	day := ""
+	if len(pts) > 0 {
+		day = pts[0].T
+	}
+	if d.ago == nil || d.agoFor != day || now.Sub(d.agoAt) > time.Minute || !now.After(d.agoAt) {
+		ago, err := st.Yesterday(now)
+		if err != nil {
+			return nil, "", err
+		}
+		d.ago, d.agoAt, d.agoFor = ago, now, day
+	}
+	bars, views := drawDay(pts, d.ago)
 	d.bars, d.today = bars, dayLine(views, st.Online())
 	d.at = now
 	return d.bars, d.today, nil

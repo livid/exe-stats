@@ -928,3 +928,47 @@ func TestTodayHalfHour(t *testing.T) {
 		t.Fatalf("%d bars hold the view, %q", shown, row.Today)
 	}
 }
+
+// TestDrawDayOverYesterday: a site's bars stand over yesterday's same
+// hours on one scale, the busiest hour of the two chartH high in whole
+// 2px steps; the hour under way shows its cap from the first minute, and
+// the hours to come still show yesterday's.
+func TestDrawDayOverYesterday(t *testing.T) {
+	loc, _ := time.LoadLocation("Asia/Shanghai")
+	day := time.Date(2026, 10, 2, 0, 0, 0, 0, loc)
+	pts := func(at time.Time, views []int, now int) []stats.Point {
+		var out []stats.Point
+		for h, n := range views {
+			out = append(out, stats.Point{T: at.Add(time.Duration(h) * time.Hour).Format(time.RFC3339), Pageviews: n, Future: h > now})
+		}
+		return out
+	}
+	today := make([]int, 24)
+	today[9], today[10] = 50, 0 // the busiest of today, and the hour under way, empty yet
+	ago := make([]int, 24)
+	ago[9], ago[14] = 25, 100 // yesterday's busiest is the scale
+	bars, words := drawDay(pts(day, today, 10), pts(day.AddDate(0, 0, -1), ago, 23))
+	if len(bars) != 24 || words != "50 views today" {
+		t.Fatalf("%d bars, %q", len(bars), words)
+	}
+	for i, want := range map[int]barView{
+		9:  {H: 20, Y: 10, Title: "09:00 · 50 views, 25 yesterday"},
+		10: {H: 2, Y: 0, Class: "now", Title: "10:00 · 0 views so far, 0 yesterday"},
+		14: {H: 0, Y: chartH, Class: "to", Title: "14:00 · 100 views yesterday"},
+		3:  {H: 0, Y: 0, Title: "03:00 · 0 views, 0 yesterday"},
+	} {
+		if bars[i] != want {
+			t.Errorf("bar %d = %+v, want %+v", i, bars[i], want)
+		}
+	}
+	for _, b := range bars {
+		if b.H%2 != 0 || b.Y%2 != 0 || b.H > chartH || b.Y > chartH {
+			t.Fatalf("a bar off the 2px steps or over the top: %+v", b)
+		}
+	}
+	// one view in a quiet hour still stands a step high
+	today[3] = 1
+	if bars, _ := drawDay(pts(day, today, 10), pts(day.AddDate(0, 0, -1), ago, 23)); bars[3].H != 2 {
+		t.Fatalf("one view stands %dpx", bars[3].H)
+	}
+}

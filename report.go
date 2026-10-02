@@ -500,6 +500,19 @@ func (s *Stats) Today(now time.Time) ([]Point, error) {
 	return series(sp, c, now), nil
 }
 
+// Yesterday is the day before's chart as Today draws today's: a point
+// an hour, midnight to midnight, people alone. It is a day that has
+// ended, so it is read from the days kept (and from the hits until it is
+// kept, a few minutes past midnight).
+func (s *Stats) Yesterday(now time.Time) ([]Point, error) {
+	sp := spanOf("yesterday", now, s.coll.Location())
+	c, err := s.over(Filter{}, sp.From, sp.To, now, want{hours: true})
+	if err != nil {
+		return nil, err
+	}
+	return series(sp, c, now), nil
+}
+
 func ago(d time.Duration) string {
 	switch {
 	case d < 5*time.Second:
