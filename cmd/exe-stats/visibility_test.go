@@ -27,7 +27,7 @@ func TestVisibility(t *testing.T) {
 	alt := "shop.example page views, counted by exe-stats"
 	badgeLinks := func(href string) []string {
 		return []string{
-			`id="badge-html" readonly value="&lt;a href=&#34;` + href + `&#34;&gt;&lt;img src=&#34;` + src + `&#34; width=&#34;88&#34; height=&#34;31&#34; alt=&#34;` + alt + `&#34;&gt;&lt;/a&gt;"`,
+			`id="badge-html" readonly value="&lt;a href=&#34;` + href + `&#34;&gt;&lt;img src=&#34;` + src + `&#34; width=&#34;88&#34; height=&#34;31&#34; alt=&#34;` + alt + `&#34; style=&#34;image-rendering: pixelated;&#34;&gt;&lt;/a&gt;"`,
 			`id="badge-md" readonly value="[![` + alt + `](` + src + `)](` + href + `)"`,
 		}
 	}

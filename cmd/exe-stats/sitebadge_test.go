@@ -122,7 +122,7 @@ func TestSiteBadge(t *testing.T) {
 	alt := "shop.example page views, counted by exe-stats"
 	for _, want := range []string{
 		`<option value="1" selected>Hit Counter</option>`,
-		`id="badge-html" readonly value="&lt;a href=&#34;https://stats.example/&#34;&gt;&lt;img src=&#34;` + src + `&#34; width=&#34;88&#34; height=&#34;31&#34; alt=&#34;` + alt + `&#34;&gt;&lt;/a&gt;"`,
+		`id="badge-html" readonly value="&lt;a href=&#34;https://stats.example/&#34;&gt;&lt;img src=&#34;` + src + `&#34; width=&#34;88&#34; height=&#34;31&#34; alt=&#34;` + alt + `&#34; style=&#34;image-rendering: pixelated;&#34;&gt;&lt;/a&gt;"`,
 		`id="badge-md" readonly value="[![` + alt + `](` + src + `)](https://stats.example/)"`,
 		`id="badge-said" role="status">The badge is on: any page may show it.</p>`,
 		`id="hosts-said" role="status"></p>`,

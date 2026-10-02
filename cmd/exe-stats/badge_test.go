@@ -86,7 +86,7 @@ func TestBadgePage(t *testing.T) {
 			got[m[1]] = html.UnescapeString(m[2])
 		}
 		want := map[string]string{
-			"html": `<a href="` + c.origin + `/"><img src="` + c.origin + `/badge.gif" width="88" height="31" alt="` + badgeAlt + `"></a>`,
+			"html": `<a href="` + c.origin + `/"><img src="` + c.origin + `/badge.gif" width="88" height="31" alt="` + badgeAlt + `" style="image-rendering: pixelated;"></a>`,
 			"md":   `[![` + badgeAlt + `](` + c.origin + `/badge.gif)](` + c.origin + `/)`,
 		}
 		if len(got) != 2 || got["html"] != want["html"] || got["md"] != want["md"] {

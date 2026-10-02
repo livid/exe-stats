@@ -200,7 +200,7 @@ func (a *App) badgeLinks(r *http.Request, s Site) (src, html, md, alt string) {
 	}
 	src = o + "/badge/" + s.ID + ".gif"
 	alt = s.Domain + " page views, counted by exe-stats"
-	html = `<a href="` + href + `"><img src="` + src + `" width="88" height="31" alt="` + alt + `"></a>`
+	html = `<a href="` + href + `"><img src="` + src + `" width="88" height="31" alt="` + alt + `" style="image-rendering: pixelated;"></a>`
 	md = `[![` + alt + `](` + src + `)](` + href + `)`
 	return
 }

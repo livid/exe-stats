@@ -52,7 +52,7 @@ type badgeData struct {
 func (a *App) handleBadgePage(w http.ResponseWriter, r *http.Request) {
 	o := a.originOf(r)
 	d := badgeData{Host: a.host(r), Alt: badgeAlt, Size: badgeSize, Frames: badgeFrames,
-		HTML: `<a href="` + o + `/"><img src="` + o + `/badge.gif" width="88" height="31" alt="` + badgeAlt + `"></a>`,
+		HTML: `<a href="` + o + `/"><img src="` + o + `/badge.gif" width="88" height="31" alt="` + badgeAlt + `" style="image-rendering: pixelated;"></a>`,
 		MD:   `[![` + badgeAlt + `](` + o + `/badge.gif)](` + o + `/)`}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
