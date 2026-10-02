@@ -27,6 +27,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"syscall"
 	"time"
@@ -303,5 +304,17 @@ func openDB(path string) (*sql.DB, error) {
 		db.Close()
 		return nil, err
 	}
+	return db, nil
+}
+
+// openReader opens a second, read-only pool on a site's file for its
+// reports: a connection a core, so a report's queries — and the days
+// it finds uncounted — run all at once (stats.Options.Reader).
+func openReader(path string) (*sql.DB, error) {
+	db, err := sql.Open("sqlite", path+"?_pragma=busy_timeout(5000)&_pragma=query_only(1)")
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(runtime.NumCPU())
 	return db, nil
 }

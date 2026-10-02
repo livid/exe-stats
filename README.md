@@ -150,7 +150,8 @@ go build -o exe-stats ./cmd/exe-stats
 Every field of the config has a default, so no config at all runs a
 server on `127.0.0.1:7795` over `./data`. It keeps `app.db` (accounts,
 sessions, sites, the month's counts) and `sites/<id>.db`, one SQLite
-file a site — each is the database this package is handed, so a site's
+file a site — each is the database this package is handed, with a
+read-only pool of a connection a core beside it (`Reader`), so a site's
 numbers can be copied or deleted as one file. `origin` is the public
 address: the snippet names it, the sign-in message names its host, the
 cookie is `Secure` when it is https, and a request that changes

@@ -34,6 +34,7 @@ type siteEntry struct {
 	site Site
 	st   *stats.Stats
 	db   *sql.DB
+	rd   *sql.DB // the reports' read-only pool on the same file
 
 	saved      int64   // the site.Seen the store has
 	backfilled bool    // site.Seen has been read from the site's own hits
@@ -44,8 +45,9 @@ type siteEntry struct {
 func (e *siteEntry) close() {
 	if e.st != nil {
 		e.st.Stop()
+		e.rd.Close()
 		e.db.Close()
-		e.st, e.db = nil, nil
+		e.st, e.db, e.rd = nil, nil, nil
 	}
 }
 
@@ -113,22 +115,29 @@ func (a *App) statsOf(e *siteEntry) (*stats.Stats, error) {
 	if e.st != nil {
 		return e.st, nil
 	}
-	db, err := openDB(filepath.Join(a.cfg.Data, "sites", e.site.ID+".db"))
+	path := filepath.Join(a.cfg.Data, "sites", e.site.ID+".db")
+	db, err := openDB(path)
 	if err != nil {
+		return nil, err
+	}
+	rd, err := openReader(path)
+	if err != nil {
+		db.Close()
 		return nil, err
 	}
 	loc, err := time.LoadLocation(e.site.TZ)
 	if err != nil {
 		loc = time.UTC
 	}
-	st, err := stats.New(db, stats.Options{Location: loc, Title: e.site.Domain, Log: a.log,
+	st, err := stats.New(db, stats.Options{Location: loc, Title: e.site.Domain, Log: a.log, Reader: rd,
 		Path: "/sites/" + e.site.ID, JSONPath: "/v1/sites/" + e.site.ID + "/stats", HomeURL: "/", HomeLabel: "Sites"})
 	if err != nil {
+		rd.Close()
 		db.Close()
 		return nil, err
 	}
 	go st.Run()
-	e.st, e.db = st, db
+	e.st, e.db, e.rd = st, db, rd
 	return st, nil
 }
 
