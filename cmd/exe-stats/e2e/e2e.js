@@ -210,6 +210,13 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     await shot(set, 'settings-ok-dpr1');
     await set.close();
 
+    // ---- the Sites window, left open, counts the views as they come ----
+    const liveDay = await page.waitForFunction(() => document.querySelector('.site .tv').textContent === '3 views today'
+      && document.querySelector('.site .bars i.now').getBoundingClientRect().height === 24
+      && /^3 of /.test(document.getElementById('used').parentElement.textContent), null, { timeout: 10000 }).then(() => true).catch(() => false);
+    ok(liveDay, "the open page's day, its bar and the month's count follow the views without a reload",
+      await page.evaluate(() => [document.querySelector('.site .tv').textContent, document.getElementById('used').textContent]));
+
     // ---- the Sites window draws the day: a bar an hour, the views in the hour still filling ----
     await page.reload();
     const day = await page.evaluate(() => {

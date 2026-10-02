@@ -41,6 +41,7 @@ type siteEntry struct {
 	refused    refusal // the last beacon refused for this site, since the server started
 	badge      siteBadge
 	icon       iconState // the site's favicon (siteicon.go)
+	day        siteDay   // its day as last drawn, for the live streams (homelive.go)
 }
 
 func (e *siteEntry) close() {

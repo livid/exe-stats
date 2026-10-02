@@ -131,6 +131,8 @@ type App struct {
 	manual  map[string]time.Time  // the last Check Now of an address
 	checkMu sync.Mutex            // one balance check at a time
 	iconSem chan struct{}         // the site icons being fetched (siteicon.go)
+	done    chan struct{}         // closed when the server stops: the live streams end
+	stopped sync.Once
 }
 
 // Balancer reads a wallet's holding; the RPC in service, a table in tests.
@@ -149,7 +151,7 @@ func newApp(cfg Config, appDB *sql.DB, rpc Balancer) (*App, error) {
 		return nil, err
 	}
 	a := &App{cfg: cfg, rules: rules, store: st, rpc: rpc, limit: newLimiter(), log: log.Printf,
-		accts: map[string]*acct{}, sites: map[string]*siteEntry{}, manual: map[string]time.Time{}, iconSem: make(chan struct{}, iconBusy)}
+		accts: map[string]*acct{}, sites: map[string]*siteEntry{}, manual: map[string]time.Time{}, iconSem: make(chan struct{}, iconBusy), done: make(chan struct{})}
 	if cfg.Origin != "" {
 		u, err := url.Parse(cfg.Origin)
 		if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") {
@@ -196,6 +198,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /v1/sites/{id}/stats", a.handleDesk)
 	mux.HandleFunc("GET /sites/{id}/settings", a.handleSettings)
 	mux.HandleFunc("GET /sites/{id}/icon", a.handleSiteIcon)
+	mux.HandleFunc("GET /v1/home/live", a.handleHomeLive)
 	mux.HandleFunc("GET /v1/sites/{id}/setup", a.handleSetup)
 	mux.HandleFunc("POST /v1/sites/{id}/hosts", a.handleAddHost)
 	mux.HandleFunc("POST /v1/sites/{id}/hosts/remove", a.handleRemoveHost)
@@ -230,8 +233,12 @@ func (a *App) run(ctx context.Context) {
 	}
 }
 
+// stop ends the live streams.
+func (a *App) stop() { a.stopped.Do(func() { close(a.done) }) }
+
 // close writes what is held and closes every site's file.
 func (a *App) close() {
+	a.stop()
 	a.flushUsage()
 	a.flushSeen(true)
 	a.mu.Lock()
@@ -282,6 +289,7 @@ func main() {
 		ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 2 * time.Minute}
 	go func() {
 		<-ctx.Done()
+		app.stop()
 		sh, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		srv.Shutdown(sh)

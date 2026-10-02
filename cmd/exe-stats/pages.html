@@ -24,7 +24,7 @@
         <dt>Wallet</dt><dd><code title="{{.Addr}}">{{.AddrShort}}</code></dd>
         <dt>Holding</dt><dd>{{.Holding}}</dd>
         <dt>Tier</dt><dd><b>{{.TierName}}</b> · {{.TierLine}}</dd>
-        <dt>This month</dt><dd>{{if .NoTier}}{{.Used}} views{{else}}<span class="meter"><i style="width: {{.Pct}}%"></i></span>{{.Used}} of {{.Cap}} views{{end}}</dd>
+        <dt>This month</dt><dd>{{if .NoTier}}<span id="used">{{.Used}}</span> views{{else}}<span class="meter"><i id="usedbar" style="width: {{.Pct}}%"></i></span><span id="used">{{.Used}}</span> of {{.Cap}} views{{end}}</dd>
       </dl>
       {{range .Lines}}<p class="notice">{{.}}</p>{{end}}
       <p class="flash{{if .Fault}} fault{{end}}" role="status">{{if .Fault}}{{.Fault}}{{else}}{{.Note}}{{end}}</p>
@@ -80,6 +80,45 @@
 </div>
 {{template "tiers" .}}
 {{end}}
+<script>
+// the numbers live: each site's day and the month's count, from the
+// server's stream while the page is seen (homelive.go); a stream with no
+// word for a minute is dropped and another opened
+(() => {
+  if (!document.getElementById("sites") || !window.EventSource) return;
+  let es = null, quiet = 0;
+  const close = () => { if (es) es.close(); es = null; clearTimeout(quiet); };
+  const alive = () => { clearTimeout(quiet); quiet = setTimeout(() => { close(); open(); }, 60000); };
+  const draw = h => {
+    const used = document.getElementById("used"), bar = document.getElementById("usedbar");
+    if (used) used.textContent = h.used;
+    if (bar) bar.style.width = h.pct + "%";
+    for (const s of h.sites) {
+      const row = document.getElementById("s-" + s.id), box = row && row.querySelector(".bars");
+      if (!box) continue;
+      row.querySelector(".tv").textContent = s.today;
+      box.setAttribute("aria-label", box.getAttribute("aria-label").replace(/: .*$/, ": " + s.today));
+      while (box.children.length < s.bars.length) box.appendChild(document.createElement("i"));
+      while (box.children.length > s.bars.length) box.lastChild.remove();
+      s.bars.forEach((b, i) => {
+        const el = box.children[i];
+        el.style.height = b.h + "px";
+        el.className = b.c || "";
+        if (b.t) el.title = b.t; else el.removeAttribute("title");
+      });
+    }
+  };
+  const open = () => {
+    if (es) return;
+    es = new EventSource("/v1/home/live");
+    es.addEventListener("home", ev => { alive(); draw(JSON.parse(ev.data)); });
+    es.addEventListener("ping", alive);
+    alive();
+  };
+  document.addEventListener("visibilitychange", () => document.hidden ? close() : open());
+  if (!document.hidden) open();
+})();
+</script>
 <script>
 (() => {
   // a site's days begin where its owner is

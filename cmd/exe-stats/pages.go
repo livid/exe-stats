@@ -88,10 +88,11 @@ type siteRow struct {
 
 // barView is an hour of a site's day on its row: a box chartH high at
 // the busiest hour, the hour still filling lighter, those to come empty.
+// The live stream (homelive.go) sends the same.
 type barView struct {
-	H     int
-	Class string // "" | "now" | "to"
-	Title string
+	H     int    `json:"h"`
+	Class string `json:"c,omitempty"` // "" | "now" | "to"
+	Title string `json:"t,omitempty"`
 }
 
 const chartH = 24
@@ -102,6 +103,13 @@ func (row *siteRow) today(now time.Time) error {
 	if err != nil {
 		return err
 	}
+	row.Bars, row.Today = drawDay(pts)
+	return nil
+}
+
+// drawDay is a day's chart as its row draws it: its bars, and its views
+// in words.
+func drawDay(pts []stats.Point) ([]barView, string) {
 	top, total, last := 0, 0, -1
 	for i, p := range pts {
 		top, total = max(top, p.Pageviews), total+p.Pageviews
@@ -112,6 +120,7 @@ func (row *siteRow) today(now time.Time) error {
 			last = i
 		}
 	}
+	bars := make([]barView, 0, len(pts))
 	for i, p := range pts {
 		b := barView{}
 		if t, err := time.Parse(time.RFC3339, p.T); err == nil {
@@ -126,10 +135,9 @@ func (row *siteRow) today(now time.Time) error {
 		if top > 0 && p.Pageviews > 0 {
 			b.H = (p.Pageviews*chartH + top - 1) / top
 		}
-		row.Bars = append(row.Bars, b)
+		bars = append(bars, b)
 	}
-	row.Today = viewWords(total) + " today"
-	return nil
+	return bars, viewWords(total) + " today"
 }
 
 // viewWords is a count of page views in words: 1 view, 12,345 views.
