@@ -194,6 +194,15 @@ out the HTML and the Markdown that link it, naming the server by its
 `python3 cmd/exe-stats/badge.py sheet.png` redraws `badge.gif` and
 writes every frame at 4× to look at.
 
+**The icons.** The tab and the home screen show a chrome tally counter,
+the thing a doorman counts a crowd with, its last wheel in the
+visitors' orange. `/favicon.ico` holds it drawn three times, not scaled:
+16 for a tab at 100 percent, 24 at 150 and 32 at 200.
+`/apple-touch-icon.png` is the 32 at 5× on the desktop's lavender.
+`cmd/exe-stats/icon.py` draws both from pixel grids, and
+`python3 cmd/exe-stats/icon.py sheet.png` also writes them at 8× to look
+at.
+
 **A site's own badge.** The last section of a site's settings is a
 pop-up of badge styles, None until the owner picks one, since anyone can
 read a badge and a site's numbers are its owner's to show. The first

@@ -11,6 +11,7 @@
 <title>Stats · {{.Host}}</title>
 <meta name="description" content="Page views for your own sites: one script tag, no cookies, and a desk of numbers for each site. For {{.Token}} holders.">
 <meta name="theme-color" content="#dddddd">
+{{template "icons"}}
 <style>{{chrome}}{{template "style"}}</style>
 </head>
 <body>
@@ -185,6 +186,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{{.Domain}} Settings · {{.Host}}</title>
 <meta name="theme-color" content="#dddddd">
+{{template "icons"}}
 {{if .Badge}}{{template "badgefit"}}{{end}}
 <style>{{chrome}}{{popup}}{{template "style"}}{{template "badgecss"}}
 h2 { margin: 0 0 8px; font-size: 12px; line-height: 16px; }
@@ -350,6 +352,10 @@ document.getElementById("badge-style").addEventListener("change", e => e.target.
 </script>
 </body>
 </html>{{end}}
+
+{{/* The icons every page links (icon.go; drawn by icon.py). */}}
+{{define "icons"}}<link rel="icon" href="/favicon.ico" sizes="16x16 24x24 32x32">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">{{end}}
 
 {{/* The pages' own rules over the chrome, shared by every page here. */}}
 {{define "style"}}
