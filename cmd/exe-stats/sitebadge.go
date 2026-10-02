@@ -33,6 +33,9 @@ type siteBadge struct {
 	etag  string
 }
 
+// badgeFresh is how long a drawing stands before a request draws again.
+const badgeFresh = 10 * time.Second
+
 // tally is a running count of a site's page views: N of them up to row
 // ID, so each drawing counts only the rows since the last.
 type tally struct{ N, ID int64 }
@@ -83,9 +86,14 @@ func counterOf(db *sql.DB, loc *time.Location, now time.Time, t *tally) (counter
 	return day, nil
 }
 
-// GET /badge/{id}.gif — a site's own badge while its owner has one on:
-// drawn afresh at most once a minute, and kept five minutes by browsers
-// and the edge. A site without one is not found, and that is not kept.
+// GET /badge/{id}.gif — a site's own badge while its owner has one on.
+// A counter is read for being current, so nothing keeps it: a browser
+// asks again on every page and gets a 304 while the drawing is the same,
+// and the edge passes it through (stats.v2core.com has a Cache Rule that
+// bypasses /badge/*.gif, since the zone's Browser Cache TTL would
+// otherwise stretch any max-age to four hours). It is drawn afresh at
+// most every ten seconds, which a burst of readers shares. A site
+// without one is not found, and that is not kept either.
 func (a *App) handleSiteBadge(w http.ResponseWriter, r *http.Request) {
 	id, ok := strings.CutSuffix(r.PathValue("file"), ".gif")
 	a.mu.Lock()
@@ -109,7 +117,7 @@ func (a *App) handleSiteBadge(w http.ResponseWriter, r *http.Request) {
 	b := &e.badge
 	b.mu.Lock()
 	now := time.Now()
-	if b.gif == nil || b.style != style || now.Sub(b.at) >= time.Minute {
+	if b.gif == nil || b.style != style || now.Sub(b.at) >= badgeFresh {
 		day, err := counterOf(db, loc, now, &b.tally)
 		if err != nil {
 			b.mu.Unlock()
@@ -125,7 +133,7 @@ func (a *App) handleSiteBadge(w http.ResponseWriter, r *http.Request) {
 	body, etag := b.gif, b.etag
 	b.mu.Unlock()
 	w.Header().Set("Content-Type", "image/gif")
-	w.Header().Set("Cache-Control", "public, max-age=300")
+	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Cross-Origin-Resource-Policy", "cross-origin")
 	w.Header().Set("ETag", etag)
 	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(body))

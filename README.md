@@ -207,8 +207,13 @@ stand still; only the lamp at the top right moves, breathing — a rest of
 back, 3.4 s a loop. The first frame is the lamp at rest. It is served at
 `/badge/{id}.gif`, drawn by `counter.go` (badge.py's face, glyphs and
 palette, checked against `badge.gif`'s first frame pixel for pixel) at
-most once a minute; the frames after the first hold only the lamp's
-box, so it is under 1 KB. Browsers and the edge keep it five minutes. While the style is None it is not found,
+most every ten seconds; the frames after the first hold only the lamp's
+box, so it is under 1 KB. A counter is read for being current, so it is
+sent `no-cache` with an ETag: a browser asks again on every page and is
+answered 304 while the drawing is the same. On stats.v2core.com a
+Cloudflare Cache Rule ("exe-stats site badges") bypasses the edge for
+`/badge/*.gif` and passes that header through; without it the zone's
+Browser Cache TTL stretches any badge's max-age to four hours. While the style is None it is not found,
 and that answer is not kept. The settings show it at its own size and
 enlarged, with the HTML and the Markdown that put it on a page.
 

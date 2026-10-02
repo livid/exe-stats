@@ -71,8 +71,8 @@ func TestCounterOf(t *testing.T) {
 }
 
 // TestSiteBadge: a site's badge is off until its owner picks a style in
-// its settings; then /badge/{id}.gif is its Hit Counter, kept five
-// minutes, and the settings hand out the HTML and the Markdown that show
+// its settings; then /badge/{id}.gif is its Hit Counter, asked again
+// on every page and answered 304 while it is the same, and the settings hand out the HTML and the Markdown that show
 // it. Off again, it is gone, and that is not kept.
 func TestSiteBadge(t *testing.T) {
 	h := newHarness(t)
@@ -140,7 +140,7 @@ func TestSiteBadge(t *testing.T) {
 	h.app.mu.Unlock()
 	hitsAt(t, db, time.Now().Add(-time.Minute), time.Now())
 	rec := h.do(nil, "GET", gifAt, "", nil)
-	if rec.Code != 200 || rec.Header().Get("Content-Type") != "image/gif" || rec.Header().Get("Cache-Control") != "public, max-age=300" ||
+	if rec.Code != 200 || rec.Header().Get("Content-Type") != "image/gif" || rec.Header().Get("Cache-Control") != "no-cache" ||
 		rec.Header().Get("Cross-Origin-Resource-Policy") != "cross-origin" {
 		t.Fatalf("%s answered %d, %v", gifAt, rec.Code, rec.Header())
 	}

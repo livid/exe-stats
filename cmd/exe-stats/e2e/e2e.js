@@ -278,7 +278,7 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     await bp.waitForFunction(() => [...document.querySelectorAll('.badges img')].every(i => i.complete && i.naturalWidth === 88));
     ok(await bp.locator('#badge-html').inputValue() === `<a href="${APP}/"><img src="${gifURL}" width="88" height="31" alt="shop.example page views, counted by exe-stats"></a>`, "the HTML shows the site's own badge", await bp.locator('#badge-html').inputValue());
     const res = await bp.request.get(gifURL);
-    ok(res.status() === 200 && res.headers()['content-type'] === 'image/gif' && res.headers()['cache-control'] === 'public, max-age=300', 'and it is there for any page, kept five minutes', res.headers());
+    ok(res.status() === 200 && res.headers()['content-type'] === 'image/gif' && res.headers()['cache-control'] === 'no-cache', 'and it is there for any page, asked again every time', res.headers());
     await bp.click('.copy[data-for="badge-html"]');
     await bp.waitForFunction(() => document.getElementById('badge-said').textContent.startsWith('The HTML'), null, { timeout: 3000 }).catch(() => {});
     const copied = await bp.locator('#badge-said').innerText();
