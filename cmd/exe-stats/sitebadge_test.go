@@ -120,14 +120,13 @@ func TestSiteBadge(t *testing.T) {
 	page = h.do(w, "GET", settings+"?m=badgeon", "", nil).Body.String()
 	src := "https://stats.example/badge/" + id + ".gif"
 	alt := "shop.example page views, counted by exe-stats"
-	// the link is tagged: the site, a badge, its style; written into
-	// the field's value, the HTML's &amp; is escaped once more
-	tagsHTML := "utm_source=shop.example&amp;amp;utm_medium=badge&amp;amp;utm_campaign=hit-counter"
-	tagsMD := "utm_source=shop.example&amp;utm_medium=badge&amp;utm_campaign=hit-counter"
+	// the link is tagged: the site, a badge, its style, with a plain &
+	// in both (the field's value escapes it once)
+	tags := "utm_source=shop.example&amp;utm_medium=badge&amp;utm_campaign=hit-counter"
 	for _, want := range []string{
 		`<option value="1" selected>Hit Counter</option>`,
-		`id="badge-html" readonly value="&lt;a href=&#34;https://stats.example/?` + tagsHTML + `&#34;&gt;&lt;img src=&#34;` + src + `&#34; width=&#34;88&#34; height=&#34;31&#34; alt=&#34;` + alt + `&#34; style=&#34;image-rendering: pixelated;&#34;&gt;&lt;/a&gt;"`,
-		`id="badge-md" readonly value="[![` + alt + `](` + src + `)](https://stats.example/?` + tagsMD + `)"`,
+		`id="badge-html" readonly value="&lt;a href=&#34;https://stats.example/?` + tags + `&#34;&gt;&lt;img src=&#34;` + src + `&#34; width=&#34;88&#34; height=&#34;31&#34; alt=&#34;` + alt + `&#34; style=&#34;image-rendering: pixelated;&#34;&gt;&lt;/a&gt;"`,
+		`id="badge-md" readonly value="[![` + alt + `](` + src + `)](https://stats.example/?` + tags + `)"`,
 		`id="badge-said" role="status">The badge is on: any page may show it.</p>`,
 		`id="hosts-said" role="status"></p>`,
 	} {

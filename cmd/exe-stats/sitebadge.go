@@ -202,11 +202,13 @@ func (a *App) badgeLinks(r *http.Request, s Site) (src, html, md, alt string) {
 		href = o + "/sites/" + s.ID
 	}
 	style := badgeStyles[min(max(s.Badge, 0), len(badgeStyles)-1)]
-	tags := []string{"utm_source=" + url.QueryEscape(s.Domain), "utm_medium=badge",
-		"utm_campaign=" + url.QueryEscape(strings.ToLower(strings.ReplaceAll(style, " ", "-")))}
+	// a plain & in the HTML too: the code is read in a field before it is
+	// pasted, and a browser leaves &utm_… as it is
+	href += "?utm_source=" + url.QueryEscape(s.Domain) + "&utm_medium=badge&utm_campaign=" +
+		url.QueryEscape(strings.ToLower(strings.ReplaceAll(style, " ", "-")))
 	src = o + "/badge/" + s.ID + ".gif"
 	alt = s.Domain + " page views, counted by exe-stats"
-	html = `<a href="` + href + "?" + strings.Join(tags, "&amp;") + `"><img src="` + src + `" width="88" height="31" alt="` + alt + `" style="image-rendering: pixelated;"></a>`
-	md = `[![` + alt + `](` + src + `)](` + href + "?" + strings.Join(tags, "&") + `)`
+	html = `<a href="` + href + `"><img src="` + src + `" width="88" height="31" alt="` + alt + `" style="image-rendering: pixelated;"></a>`
+	md = `[![` + alt + `](` + src + `)](` + href + `)`
 	return
 }
