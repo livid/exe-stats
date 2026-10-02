@@ -169,12 +169,13 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     set.errors = [];
     set.on('pageerror', e => set.errors.push(String(e)));
     await set.goto(APP + sHref);
-    ok(await set.locator('#setup.ok').count() === 0, 'before any view the lamp is not green');
+    ok(await set.locator('#setup.ok').count() === 0, 'before any view the check is not green');
     ok((await set.locator('#setup-line').innerText()).startsWith('Waiting for the first page view.'), 'and the line says it waits', await set.locator('#setup-line').innerText());
     ok(await set.locator('#snip').inputValue() === snippet, 'the settings carry the same snippet');
-    const lampWait = await box(set, '#setup .lamp'), snipWait = await box(set, '#snip');
-    ok(lampWait.width === 32 && lampWait.height === 32, 'the lamp is 32px', lampWait);
-    ok(await set.locator('.lamp .mark').isHidden(), 'and has no check yet');
+    const tickWait = await box(set, '#setup .tick'), snipWait = await box(set, '#snip');
+    ok(tickWait.width === 16 && tickWait.height === 16, 'the check mark is 16px', tickWait);
+    const dim = await set.evaluate(() => getComputedStyle(document.querySelector('.tick .mark')).fill);
+    ok(dim === 'rgb(204, 204, 204)' && await set.locator('.tick .shadow').first().isHidden(), 'and dim, without its shadow', dim);
     await shot(set, 'settings-wait-dpr1');
 
     // ---- the snippet on the site: a load, a pushState, a hash, another load ----
@@ -194,11 +195,10 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
 
     // ---- the settings page, left open, turns green by itself ----
     await set.waitForSelector('#setup.ok', { timeout: 10000 }).catch(() => {});
-    ok(await set.locator('#setup.ok').count() === 1, 'a view on the site turns the lamp green without a reload');
+    ok(await set.locator('#setup.ok').count() === 1, 'a view on the site turns the check green without a reload');
     ok((await set.locator('#setup-line').innerText()) === 'The snippet works: the last page view came just now.', 'and the line says the snippet works', await set.locator('#setup-line').innerText());
-    ok(await set.locator('.lamp .mark').isVisible(), 'the check is drawn');
-    const face = await set.evaluate(() => getComputedStyle(document.querySelector('.lamp .face')).fill);
-    ok(face === 'rgb(31, 158, 51)', 'the lamp is the pass green', face);
+    const green = await set.evaluate(() => getComputedStyle(document.querySelector('.tick .mark')).fill);
+    ok(green === 'rgb(31, 158, 51)' && await set.locator('.tick .shadow').first().isVisible(), 'the check is the pass green, with its shadow', green);
     const snipOk = await box(set, '#snip');
     ok(snipOk.y === snipWait.y, 'nothing under the line moved', [snipWait, snipOk]);
     ok(set.errors.length === 0, 'no script errors on the settings page', set.errors);
@@ -226,7 +226,7 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     // ---- the account at every scale and on a phone ----
     const cookies = await rich.ctx.cookies();
     ok(cookies.length === 1 && cookies[0].httpOnly && cookies[0].sameSite === 'Lax', 'the session is one HttpOnly, SameSite=Lax cookie');
-    for (const v of [{ dpr: 1 }, { dpr: 1.5 }, { dpr: 2 }, { dpr: 3, phone: true, viewport: { width: 390, height: 844 } }]) {
+    for (const v of [{ dpr: 1 }, { dpr: 1.25 }, { dpr: 1.5 }, { dpr: 2 }, { dpr: 3, phone: true, viewport: { width: 390, height: 844 } }]) {
       const c = await context(browser, ['Rich'], v);
       await c.ctx.addCookies(cookies);
       await c.page.goto(APP + '/');
@@ -238,10 +238,10 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
       ok(tops.length >= 3 && tops.every(t => t === tops[0]), `${tag}: a site's buttons are one row`, tops);
       await shot(c.page, 'account-' + tag);
       await c.page.goto(`${APP}/sites/${siteId}/settings`);
-      ok(await c.page.locator('#setup.ok').count() === 1 && await noScroll(c.page), `${tag}: the settings show the green lamp and do not scroll sideways`);
+      ok(await c.page.locator('#setup.ok').count() === 1 && await noScroll(c.page), `${tag}: the settings show the green check and do not scroll sideways`);
       const heights = await c.page.locator('#settings .btn:not(.tbox)').evaluateAll(bs => bs.map(x => Math.round(x.getBoundingClientRect().height)));
       ok(heights.length === 2 && heights.every(h => h === 20), `${tag}: settings buttons are 20px high`, heights);
-      // the line keeps the room of its longest wording, so the lamp's turn
+      // the line keeps the room of its longest wording, so the check's turn
       // moves nothing — measured in DejaVu Sans, Verdana's width, which is
       // where an iPhone and Windows land in the font stack
       const room = await c.page.evaluate(lines => {

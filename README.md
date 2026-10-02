@@ -138,9 +138,9 @@ says what did (`counted`, `not this site's page`, `month full`, …), for
 an owner checking a snippet in the browser's network panel.
 
 **A site's settings** (`/sites/{id}/settings`, its Settings… button)
-begin with the setup check: a lamp that turns green once the snippet
-reports a view from the site's own pages — counted or not, since a
-resting site's snippet is in place too. Until then its line says the
+begin with the setup check: a check mark that turns green once the
+snippet reports a view from the site's own pages — counted or not, since
+a resting site's snippet is in place too. Until then its line says the
 page waits, or why a view was refused (a page on another host, or a
 beacon sent from another origin), and the page asks
 `/v1/sites/{id}/setup` again every few seconds, so a page of the site
