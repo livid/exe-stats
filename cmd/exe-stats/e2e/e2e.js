@@ -198,7 +198,9 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     await page.goto(APP + '/');
     ok(await page.locator('#sites .snip, #sites .copy').count() === 0, 'the Sites window carries no snippet');
     ok((await page.locator('.site .name').innerText()) === 'shop.example', 'the domain is read out of a pasted address');
-    ok((await page.locator('.site .st').innerText()) === 'Counting', 'the site counts', await page.locator('.site .st').innerText());
+    const silent = await page.locator('.site .trouble').innerText();
+    ok(await page.locator('.site .st').count() === 0 && silent === "No page view yet: its snippet, in Settings…, goes in the site's head.",
+      'the row says no Counting, only that its snippet has sent nothing yet, by its buttons', silent);
     const empty = await page.evaluate(() => {
       const cv = document.querySelector('.site .wheels'), d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
       let inked = 0;
@@ -278,6 +280,7 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     // ---- the Sites window, left open, counts the views as they come ----
     const liveDay = await page.waitForFunction(() => document.querySelector('.site .wheels').getAttribute('aria-label') === '3 views today'
       && document.querySelector('.site .onn').textContent === '1' && document.querySelector('.site').meter.shown === 3
+      && document.querySelector('.site .trouble').textContent === ''
       && getComputedStyle(document.querySelector('.site .bars i.now'), '::after').height === '40px'
       && /^3 of /.test(document.getElementById('used').parentElement.textContent), null, { timeout: 10000 }).then(() => true).catch(() => false);
     ok(liveDay, "the open page's day, its bar and the month's count follow the views without a reload",
@@ -292,7 +295,7 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     const day = await page.evaluate(() => {
       const bars = [...document.querySelectorAll('.site .bars i')], b = document.querySelector('.site .bars').getBoundingClientRect();
       const row = document.querySelector('.site').getBoundingClientRect(), line = document.querySelector('.site .sline').getBoundingClientRect();
-      const tv = document.querySelector('.site .tv').getBoundingClientRect(), st = document.querySelector('.site .st').getBoundingClientRect();
+      const tv = document.querySelector('.site .tv').getBoundingClientRect();
       const after = x => getComputedStyle(x, '::after'), before = x => getComputedStyle(x, '::before');
       return { n: bars.length, now: bars.filter(x => x.className === 'now').map(x => [after(x).height, after(x).borderTopColor, after(x).backgroundColor]),
         past: bars.filter(x => !x.className).map(x => [after(x).height, after(x).borderTopColor]).slice(0, 1),
@@ -300,13 +303,14 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
         to: bars.filter(x => x.className === 'to').length, w: b.width, rw: row.width, h: b.height, floor: getComputedStyle(document.querySelector('.site .bars')).borderBottom,
         first: bars[0].getBoundingClientRect().left - b.left, last: b.right - bars[bars.length - 1].getBoundingClientRect().right,
         sky: bars[0].getBoundingClientRect().top - b.top, slot: bars[0].getBoundingClientRect().height,
-        oneLine: Math.round(line.height) === 28 && Math.abs((tv.top + tv.bottom) - (st.top + st.bottom)) <= 1 && st.right <= line.right + 0.5,
+        oneLine: Math.round(line.height) === 28 && Math.round(tv.height) === 28 && Math.abs(tv.right - line.right) <= 0.5,
+        says: document.querySelector('.site .trouble').textContent,
         tv: document.querySelector('.site .wheels').getAttribute('aria-label') + ' · ' + document.querySelector('.site .onn').textContent + ' online' };
     });
     ok(day.n >= 23 && day.n <= 25 && day.now.length === 1 && day.now[0][0] === '40px' && day.now[0][1] === 'rgb(255, 102, 0)' && day.now[0][2] === 'rgb(255, 204, 153)',
       "the day is a bar an hour, this hour's the busiest and still filling, in the hero's orange", day);
     ok(day.ghost[0] === 'rgb(235, 235, 255)' && day.ghost[1] === '0px', 'yesterday stands pale behind each hour: empty, as nothing came yesterday', day.ghost);
-    ok(day.tv === '3 views today · 1 online' && day.oneLine, "who is on it and its views on the wheels, on the name's line before Counting", day);
+    ok(day.tv === '3 views today · 1 online' && day.oneLine && day.says === '', "who is on it and its views on the wheels, at the right of the name's line; a well site says nothing more", day);
     ok(Math.round(day.w) === Math.round(day.rw) && day.first === 0 && day.last === 0 && Math.round(day.h) === 55 && day.sky === 14 && day.slot === 40 && day.floor.startsWith('1px solid'),
       'the day is the row wide, 40px under 14px of sky and over a floor line', day);
     ok(await page.locator('.site .bars').getAttribute('href') === `/sites/${siteId}` && await page.locator('.site .bars').evaluate(e => getComputedStyle(e).cursor) === 'pointer',
@@ -521,6 +525,9 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     const notice = await page.locator('.notice').first().innerText();
     ok(notice.startsWith('The balance is 9,500 $V2EX under the Base tier. Everything counts until') && notice.includes('then counting stops'), 'short: the page says what is missing and until when', notice);
     ok(await page.locator('.add .btn').isDisabled(), 'short: no new sites');
+    const shortSays = await page.locator('.site .trouble').innerText();
+    ok(shortSays === 'A view from other.example was not counted: see Settings…',
+      'short: the site still counts, so its row says only what else is wrong: the view refused from other.example', shortSays);
     ok(await noScroll(page), 'short: the page does not scroll sideways');
     await shot(page, 'short-dpr1');
 

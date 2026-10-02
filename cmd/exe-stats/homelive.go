@@ -38,6 +38,7 @@ type liveSite struct {
 	Views  int       `json:"v"` // today's: the wheels count up to it as the dots land
 	Online int       `json:"o"`
 	Bars   []barView `json:"bars"`
+	Says   string    `json:"p"` // the site's trouble, "" when there is none
 }
 
 // dayView is a site's day as its row draws it.
@@ -93,9 +94,9 @@ func dayOf(d *siteDay, st *stats.Stats, now time.Time) (dayView, error) {
 // homeNow is what the stream says of an owner's account now.
 func (a *App) homeNow(addr string, now time.Time) (liveHome, error) {
 	type one struct {
-		id  string
-		day *siteDay
-		st  *stats.Stats
+		id, trouble string
+		day         *siteDay
+		st          *stats.Stats
 	}
 	var h liveHome
 	var all []one
@@ -109,10 +110,10 @@ func (a *App) homeNow(addr string, now time.Time) (liveHome, error) {
 	if ac.Tier >= 0 && ac.Tier < len(a.rules.Tiers) {
 		h.Pct = int(min(100, ac.cur.Views*100/a.rules.Tiers[ac.Tier].Views))
 	}
-	for _, s := range ac.sites {
+	for i, s := range ac.sites {
 		if e := a.sites[s.ID]; e != nil {
 			if st, err := a.statsOf(e); err == nil {
-				all = append(all, one{s.ID, &e.day, st})
+				all = append(all, one{s.ID, a.trouble(ac, i, e, now), &e.day, st})
 			}
 		}
 	}
@@ -123,7 +124,7 @@ func (a *App) homeNow(addr string, now time.Time) (liveHome, error) {
 		if err != nil {
 			continue // removed meanwhile, its file closed
 		}
-		h.Sites = append(h.Sites, liveSite{ID: o.id, Today: v.Today, Views: v.Views, Online: v.Online, Bars: v.Bars})
+		h.Sites = append(h.Sites, liveSite{ID: o.id, Today: v.Today, Views: v.Views, Online: v.Online, Bars: v.Bars, Says: o.trouble})
 	}
 	return h, nil
 }

@@ -102,6 +102,7 @@ type siteRow struct {
 	Wheels     int    // how many: five, or as many as its digits
 	CounterW   int    // the wheels' canvas with its lamp, px
 	Online     string
+	Trouble    string // what keeps it from counting, or is wrong with how it counts (trouble)
 	st         *stats.Stats
 	day        *siteDay // its day as last drawn, shared with the live streams (homelive.go)
 }
@@ -255,6 +256,37 @@ func short(n int64) string {
 	return commas(n)
 }
 
+// trouble is what keeps a site from counting, or what is wrong with how
+// it counts, in a line for its row; "" when it counts and all is well,
+// which its row does not say. Its account's own trouble is the Account
+// window's to tell; the row only says that the site is not counted. The
+// caller holds a.mu.
+func (a *App) trouble(ac *acct, i int, e *siteEntry, now time.Time) string {
+	ru := a.rules
+	switch {
+	case ac.Tier < 0 || ac.Tier >= len(ru.Tiers):
+		return "Not counted: the holding covers no tier."
+	case ru.views(ac.Tier, ac.cur, ac.prev) == StateCapped:
+		return "Not counted: the month's views are at the cap."
+	case i >= ru.Tiers[ac.Tier].Sites:
+		return "Resting: not one of the " + plural(ru.Tiers[ac.Tier].Sites, "site", "sites") + " this tier counts."
+	case e == nil:
+		return ""
+	}
+	v, note := a.setupOf(e, now)
+	switch {
+	case v.Line == waitingLine:
+		return "No page view yet: its snippet, in Settings…, goes in the site's head."
+	case !v.OK:
+		return "A view came but was not counted: see Settings…"
+	case note.Host != "":
+		return "A view from " + note.Host + " was not counted: see Settings…"
+	case note.Line != "":
+		return "A view was not counted today: see Settings…"
+	}
+	return ""
+}
+
 // ends shortens s to its first and last n characters with … between,
 // as a wallet shows an address; a string that short already is kept.
 func ends(s string, n int) string {
@@ -379,6 +411,7 @@ func (a *App) fill(d *homeData, ac *acct, r *http.Request, now time.Time) {
 	for i, s := range ac.sites {
 		row := siteRow{ID: s.ID, Domain: s.Domain, Counting: i < slots, // and until its day is read, an empty one
 			ViewsLine: "0 views today", Wheels: 5, CounterW: counterW(5), Online: "0"}
+		row.Trouble = a.trouble(ac, i, a.sites[s.ID], now)
 		if e := a.sites[s.ID]; e != nil {
 			row.Icon, row.Stamp = a.iconOf(e, now)
 			if st, err := a.statsOf(e); err == nil {

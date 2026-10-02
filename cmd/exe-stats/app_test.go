@@ -972,3 +972,60 @@ func TestDrawDayOverYesterday(t *testing.T) {
 		t.Fatalf("one view stands %dpx", bars[3].H)
 	}
 }
+
+// TestTrouble: a site's row says nothing while it counts and is well,
+// and otherwise what keeps it from counting or what is wrong with it.
+func TestTrouble(t *testing.T) {
+	h := newHarness(t)
+	w := newWallet()
+	h.bal.set(w.addr, 10000) // the Base tier: two sites
+	h.signIn(w)
+	h.form(w, "/v1/sites", url.Values{"domain": {"shop.example"}})
+	h.form(w, "/v1/sites", url.Values{"domain": {"blog.example"}})
+	shop := h.siteID(w, "shop.example")
+	says := func(i int, change func(ac *acct)) string {
+		t.Helper()
+		now := time.Now()
+		h.app.mu.Lock()
+		defer h.app.mu.Unlock()
+		ac, err := h.app.acctOf(w.addr, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cp := *ac
+		if change != nil {
+			change(&cp)
+		}
+		return h.app.trouble(&cp, i, h.app.sites[shop], now)
+	}
+	if got := says(0, nil); got != "No page view yet: its snippet, in Settings…, goes in the site's head." {
+		t.Fatalf("a new site: %q", got)
+	}
+	if home := h.do(w, "GET", "/", "", nil).Body.String(); strings.Count(home, `<span class="say trouble" role="status">No page view yet`) != 2 || strings.Contains(home, ">Counting<") {
+		t.Fatal("the rows do not say their snippets are silent, or still say Counting")
+	}
+	if got := h.beacon(shop, "https://shop.example/", "", "https://shop.example"); got != beaconCounted {
+		t.Fatalf("beacon: %q", got)
+	}
+	if got := says(0, nil); got != "" {
+		t.Fatalf("a site that counts and is well says %q", got)
+	}
+	if got := h.beacon(shop, "https://evil.example/", "", "https://evil.example"); got != beaconForeign {
+		t.Fatalf("beacon: %q", got)
+	}
+	if got := says(0, nil); got != "A view from evil.example was not counted: see Settings…" {
+		t.Fatalf("a refused view: %q", got)
+	}
+	if got := says(2, nil); got != "Resting: not one of the 2 sites this tier counts." {
+		t.Fatalf("a third site on the Base tier: %q", got)
+	}
+	if got := says(0, func(ac *acct) {
+		ac.prev = Usage{Full: true, FullTier: ac.Tier}
+		ac.cur.Views = 20000
+	}); got != "Not counted: the month's views are at the cap." {
+		t.Fatalf("a second month at the cap: %q", got)
+	}
+	if got := says(0, func(ac *acct) { ac.Tier = -1 }); got != "Not counted: the holding covers no tier." {
+		t.Fatalf("no tier: %q", got)
+	}
+}

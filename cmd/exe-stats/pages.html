@@ -41,9 +41,10 @@
   <div class="frame">
     <div class="body">
       {{range .Sites}}<div class="site" id="s-{{.ID}}">
-        <div class="sline">{{if .Icon}}<img class="ico" src="/sites/{{.ID}}/icon?v={{.Stamp}}" width="16" height="16" alt="">{{end}}<a class="name" href="/sites/{{.ID}}">{{.Domain}}</a><span class="tv"><span class="on" title="Online: who opened a page in the last five minutes"><svg class="users" viewBox="0 0 16 12" width="16" height="12" aria-hidden="true"><path d="M10 0h3v1H10zM3 1h3v1H3zM9 1h5v1H9zM2 2h5v1H2zM9 2h5v1H9zM2 3h5v1H2zM9 3h5v1H9zM2 4h5v1H2zM10 4h3v1H10zM3 5h3v1H3zM9 6h5v1H9zM2 7h5v1H2zM8 7h7v1H8zM1 8h7v1H1zM9 8h7v1H9zM0 9h9v1H0zM10 9h6v1H10zM0 10h9v1H0zM10 10h6v1H10zM0 11h9v1H0zM10 11h6v1H10z"/></svg><span class="onn">{{.Online}}</span><span class="vh"> online</span></span><canvas class="wheels" width="{{.CounterW}}" height="28" style="width: {{.CounterW}}px" data-n="{{.Wheels}}" data-v="{{.Views}}" role="img" aria-label="{{.ViewsLine}}"></canvas></span><span class="st">{{if .Counting}}Counting{{else}}Resting{{end}}</span></div>
+        <div class="sline">{{if .Icon}}<img class="ico" src="/sites/{{.ID}}/icon?v={{.Stamp}}" width="16" height="16" alt="">{{end}}<a class="name" href="/sites/{{.ID}}">{{.Domain}}</a><span class="tv"><span class="on" title="Online: who opened a page in the last five minutes"><svg class="users" viewBox="0 0 16 12" width="16" height="12" aria-hidden="true"><path d="M10 0h3v1H10zM3 1h3v1H3zM9 1h5v1H9zM2 2h5v1H2zM9 2h5v1H9zM2 3h5v1H2zM9 3h5v1H9zM2 4h5v1H2zM10 4h3v1H10zM3 5h3v1H3zM9 6h5v1H9zM2 7h5v1H2zM8 7h7v1H8zM1 8h7v1H1zM9 8h7v1H9zM0 9h9v1H0zM10 9h6v1H10zM0 10h9v1H0zM10 10h6v1H10zM0 11h9v1H0zM10 11h6v1H10z"/></svg><span class="onn">{{.Online}}</span><span class="vh"> online</span></span><canvas class="wheels" width="{{.CounterW}}" height="28" style="width: {{.CounterW}}px" data-n="{{.Wheels}}" data-v="{{.Views}}" role="img" aria-label="{{.ViewsLine}}"></canvas></span></div>
         <a class="bars" href="/sites/{{.ID}}" style="--n: {{len .Bars}}" aria-label="The desk of {{.Domain}}. Today, a bar an hour over yesterday's: {{.Today}}">{{range .Bars}}<i{{with .Class}} class="{{.}}"{{end}} style="--t: {{.H}}px; --y: {{.Y}}px"{{with .Title}} title="{{.}}"{{end}}></i>{{end}}</a>
         <div class="buttons">
+          <span class="say trouble" role="status">{{.Trouble}}</span>
           {{if not .Counting}}<form method="post" action="/v1/sites/{{.ID}}/pick"><button class="btn">Count This One</button></form>{{end}}
           <a class="btn" href="/sites/{{.ID}}/settings">Settings…</a>
           <a class="btn" href="/sites/{{.ID}}">Open</a>
@@ -257,6 +258,8 @@ const pix = (() => {
       const row = document.getElementById("s-" + s.id), box = row && row.querySelector(".bars");
       if (!box) continue;
       row.querySelector(".onn").textContent = s.o.toLocaleString("en-US");
+      const say = row.querySelector(".trouble");
+      if (say && say.textContent !== s.p) say.textContent = s.p;
       const is = bars(box), reshaped = is.length !== s.bars.length;
       if (reshaped) {
         ground(row); // the box holds its bars alone now
@@ -814,9 +817,11 @@ dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .site { padding: 0 0 4px; margin: 0 0 12px; border-bottom: 1px solid #bbb; }
 /* the row's line: the site at the left; at the right who is on it now,
    by a figure of two, and today's views on the hero's wheels with its
-   lamp; then whether it counts. On a phone the figure and the wheels
-   take a line of their own under the name, at its right: the width
-   decides, not the numbers, so a count that grows moves nothing */
+   lamp. On a phone the figure and the wheels take a line of their own
+   under the name, at its right: the width decides, not the numbers, so
+   a count that grows moves nothing. A site that counts and is well says
+   nothing more; one that is not, or not well, says so at the left of
+   its buttons */
 .site .sline { display: flex; align-items: center; margin: 0; line-height: 16px; }
 .site .name { font-weight: bold; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .site .ico { flex: none; width: 16px; height: 16px; margin-right: 6px; }
@@ -827,11 +832,10 @@ dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .site .users { display: block; flex: none; width: 16px; height: 12px; fill: #555; shape-rendering: crispEdges; }
 @media (min-resolution: 1.01dppx) and (max-resolution: 1.99dppx) { .site .users { shape-rendering: geometricPrecision; } }
 .site .wheels { display: block; flex: none; height: 28px; image-rendering: pixelated; }
-.site .st { padding-left: 12px; color: #555; white-space: nowrap; }
+.site .trouble { color: #7a1010; }
 @media (max-width: 479px) {
   .site .sline { flex-wrap: wrap; row-gap: 4px; }
   .site .tv { order: 1; flex-basis: 100%; justify-content: flex-end; margin-left: 0; padding-left: 0; } /* the wheels keep their place */
-  .site .st { margin-left: auto; }
 }
 /* words for a screen reader alone */
 .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

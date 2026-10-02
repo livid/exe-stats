@@ -48,6 +48,9 @@ func (a *App) seenOf(e *siteEntry) int64 {
 	return e.site.Seen
 }
 
+// waitingLine is the check while the snippet has reported nothing.
+const waitingLine = "Waiting for the first page view. Paste the snippet into the site's head, then open a page."
+
 // setupNote is a view refused while the snippet works, in a line, and
 // the host it names when the owner may ignore it.
 type setupNote struct{ Line, Host string }
@@ -78,7 +81,7 @@ func (a *App) setupOf(e *siteEntry, now time.Time) (setupView, setupNote) {
 		if why != "" {
 			return setupView{Line: why}, setupNote{}
 		}
-		return setupView{Line: "Waiting for the first page view. Paste the snippet into the site's head, then open a page."}, setupNote{}
+		return setupView{Line: waitingLine}, setupNote{}
 	}
 	v := setupView{OK: true, Line: "The snippet works: the last page view came " + ago(now.Sub(time.UnixMilli(seen))) + "."}
 	if rf.At == 0 || now.Sub(time.UnixMilli(rf.At)) > 24*time.Hour {
