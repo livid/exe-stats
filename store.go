@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -26,6 +27,11 @@ type DB struct {
 	// under them (Add, Sweep), and busy is how many such writes are on
 	// their way: a day counted across either is not kept (keepDay)
 	gen, busy atomic.Int64
+	// fed is told of each batch Add commits, with its ids, and swept of
+	// each Sweep's cut: the hits in memory (live.go) follow the store
+	fed    func(hits []Hit, ids []int64)
+	swept  func(before int64)
+	feedMu sync.Mutex // held from a write's commit through its feed, and by loadLive's snapshot
 }
 
 // dropping marks a write that drops kept days, from before it begins
@@ -155,7 +161,8 @@ func (d *DB) Add(hits []Hit) error {
 		return err
 	}
 	defer stmt.Close()
-	for _, h := range hits {
+	ids := make([]int64, len(hits))
+	for i, h := range hits {
 		entry, bot := 0, 0
 		if h.Entry {
 			entry = 1
@@ -163,8 +170,12 @@ func (d *DB) Add(hits []Hit) error {
 		if h.Bot {
 			bot = 1
 		}
-		if _, err := stmt.Exec(h.TS, h.VID, h.SID, entry, h.Path, h.Kind, h.Ref, h.Channel, h.Country, h.Region, h.City,
-			h.Device, h.Browser, h.OS, h.Lang, h.UTMSource, h.UTMMedium, h.UTMCampaign, bot); err != nil {
+		res, err := stmt.Exec(h.TS, h.VID, h.SID, entry, h.Path, h.Kind, h.Ref, h.Channel, h.Country, h.Region, h.City,
+			h.Device, h.Browser, h.OS, h.Lang, h.UTMSource, h.UTMMedium, h.UTMCampaign, bot)
+		if err != nil {
+			return err
+		}
+		if ids[i], err = res.LastInsertId(); err != nil {
 			return err
 		}
 	}
@@ -179,8 +190,22 @@ func (d *DB) Add(hits []Hit) error {
 			return err
 		}
 	}
-	return tx.Commit()
+	d.feedMu.Lock()
+	defer d.feedMu.Unlock()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if addCommitted != nil {
+		addCommitted()
+	}
+	if d.fed != nil {
+		d.fed(hits, ids)
+	}
+	return nil
 }
+
+// addCommitted runs between Add's commit and its feed, for a test.
+var addCommitted func()
 
 // StatsSalt is the day's salt, minted on its first call for the day;
 // every other day's salt is dropped, so yesterday's ids can never be
@@ -501,5 +526,13 @@ func (d *DB) Sweep(before time.Time) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return n, tx.Commit()
+	d.feedMu.Lock()
+	defer d.feedMu.Unlock()
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	if d.swept != nil {
+		d.swept(before.UnixMilli())
+	}
+	return n, nil
 }

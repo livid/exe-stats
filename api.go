@@ -124,6 +124,8 @@ type Stats struct {
 	kept    chan struct{}      // closed when the keeper has returned
 	keeping atomic.Bool        // whether Run started the keeper
 	tidied  atomic.Int64       // ms: when the views were last trimmed (tidy)
+	live    *live              // the last three days' hits, in memory
+	noLive  bool               // a test's: read the store
 
 	tmpl *template.Template // the standalone page
 }
@@ -188,6 +190,9 @@ func New(db *sql.DB, o Options) (*Stats, error) {
 	s := &Stats{db: d, rd: rd, width: width, coll: c, opt: o, tmpl: t, seal: sealDelay, since: since,
 		kept: make(chan struct{})}
 	s.ctx, s.cancel = context.WithCancel(context.Background())
+	s.live = &live{}
+	d.fed = func(hits []Hit, ids []int64) { s.live.fed(hits, ids, time.Now(), o.Location) }
+	d.swept = s.live.swept
 	for i := range s.views {
 		s.views[i] = make(chan struct{}, 1)
 	}

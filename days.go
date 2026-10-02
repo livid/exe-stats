@@ -178,7 +178,8 @@ func (s *Stats) split(from, to, now time.Time) (days []daySpan, raw [][2]int64) 
 }
 
 // over is a stretch's numbers under a filter: its whole days from the
-// kept parts (counting the ones not kept yet), the rest from the hits,
+// kept parts (counting the ones not kept yet), the rest from the hits
+// in memory (live.go) or, when they are not all there, in the store,
 // every query on a connection of its own (par). A list is every key
 // when the stretch is pieced together, and cut at topMax when it is
 // one stretch of hits, as Top is.
@@ -206,46 +207,71 @@ func (s *Stats) over(f Filter, from, to, now time.Time, w want) (counts, error) 
 		limit = topMax
 	}
 	for _, r := range raw {
-		g := f
-		g.From, g.To = r[0], r[1]
 		tasks = append(tasks, func() error {
-			t, err := s.rd.tally(g)
+			got, ok := s.liveOver(f, r[0], r[1], w)
+			if !ok {
+				var err error
+				if got, err = s.hitsOver(f, r[0], r[1], w, limit); err != nil {
+					return err
+				}
+			}
 			mu.Lock()
-			c.add(t)
+			c.merge(got)
+			mu.Unlock()
+			return nil
+		})
+	}
+	return c, s.par(tasks...)
+}
+
+// hitsOver reads [a, b) under a filter from the store: tally, Hours,
+// VisitorFirst and each list's rank, every query on a connection of its
+// own, the lists cut at limit (-1: whole).
+func (s *Stats) hitsOver(f Filter, a, b int64, w want, limit int) (*counts, error) {
+	c := &counts{lists: map[string]map[string]int{}}
+	for _, d := range w.dims {
+		c.lists[d] = map[string]int{}
+	}
+	var mu sync.Mutex // c's
+	g := f
+	g.From, g.To = a, b
+	tasks := []func() error{func() error {
+		t, err := s.rd.tally(g)
+		mu.Lock()
+		c.add(t)
+		mu.Unlock()
+		return err
+	}}
+	if w.hours {
+		tasks = append(tasks, func() error {
+			hs, err := s.rd.Hours(g)
+			mu.Lock()
+			c.hours = append(c.hours, hs...)
 			mu.Unlock()
 			return err
 		})
-		if w.hours {
-			tasks = append(tasks, func() error {
-				hs, err := s.rd.Hours(g)
-				mu.Lock()
-				c.hours = append(c.hours, hs...)
-				mu.Unlock()
-				return err
-			})
-		}
-		if w.firsts {
-			tasks = append(tasks, func() error {
-				fs, err := s.rd.VisitorFirst(g)
-				mu.Lock()
-				for _, ts := range fs {
-					c.firsts = append(c.firsts, first{ts, 1})
-				}
-				mu.Unlock()
-				return err
-			})
-		}
-		for _, d := range w.dims {
-			tasks = append(tasks, func() error {
-				rows, err := s.rd.rank(g, d, limit)
-				mu.Lock()
-				for _, row := range rows {
-					c.lists[d][row.Key] += row.N
-				}
-				mu.Unlock()
-				return err
-			})
-		}
+	}
+	if w.firsts {
+		tasks = append(tasks, func() error {
+			fs, err := s.rd.VisitorFirst(g)
+			mu.Lock()
+			for _, ts := range fs {
+				c.firsts = append(c.firsts, first{ts, 1})
+			}
+			mu.Unlock()
+			return err
+		})
+	}
+	for _, d := range w.dims {
+		tasks = append(tasks, func() error {
+			rows, err := s.rd.rank(g, d, limit)
+			mu.Lock()
+			for _, row := range rows {
+				c.lists[d][row.Key] += row.N
+			}
+			mu.Unlock()
+			return err
+		})
 	}
 	return c, s.par(tasks...)
 }
@@ -1024,13 +1050,20 @@ func horizon(now time.Time, loc *time.Location) time.Time {
 	return midnight(n.Year(), n.Month()-23, 1, loc)
 }
 
-// keeper is Run's other half: it counts the finished days of the view
-// without filters back to the horizon, newest first, then again a few
-// minutes after each midnight; and it gives back the days nothing reads.
+// keeper is Run's other half: it loads the last three days' hits into
+// memory (again after a midnight, if they grew past maxLive), counts the
+// finished days of the view without filters back to
+// the horizon, newest first, then again a few minutes after each
+// midnight; and it gives back the days nothing reads.
 // Stop cancels whatever it is doing and waits for it.
 func (s *Stats) keeper() {
 	defer close(s.kept)
 	for {
+		if !s.live.running() { // at start, and after a midnight if it let go
+			if err := s.loadLive(s.ctx); err != nil && s.ctx.Err() == nil {
+				s.opt.Log("stats: live: %v", err)
+			}
+		}
 		now := time.Now()
 		if err := s.fill(s.ctx, now); err != nil && s.ctx.Err() == nil {
 			s.opt.Log("stats: days: %v", err)

@@ -127,11 +127,12 @@ func reportJSON(t *testing.T, s *Stats, key string, f Filter, lists []string, no
 	return string(b)
 }
 
-// rawly is a report read from the hits alone, as before the days were kept.
+// rawly is a report read from the store's hits alone, as before the
+// days were kept and today was in memory.
 func rawly(t *testing.T, s *Stats, key string, f Filter, lists []string, now time.Time) string {
 	t.Helper()
-	s.seal = 100 * 365 * 24 * time.Hour
-	defer func() { s.seal = sealDelay }()
+	s.seal, s.noLive = 100*365*24*time.Hour, true
+	defer func() { s.seal, s.noLive = sealDelay, false }()
 	return reportJSON(t, s, key, f, lists, now)
 }
 
@@ -139,9 +140,10 @@ var dayFilters = []Filter{{}, {Country: "JP"}, {Bot: "all"}, {Path: "/"}, {Chann
 
 // TestDaysMatchHits: every range, under every filter, in zones with a
 // clock change (Santiago's skips 00:00, Havana's shows it twice) and
-// with half and three-quarter hours, reads the same from kept days as
-// from the hits — once when the days are counted, again when they are
-// only read — page lists and JSON lists alike.
+// with half and three-quarter hours, reads the same from kept days and
+// the hits in memory as from the store's hits — once when the days are
+// counted, again when they are only read — page lists and JSON lists
+// alike.
 func TestDaysMatchHits(t *testing.T) {
 	for _, zone := range []string{"UTC", "America/Los_Angeles", "America/Santiago", "America/Havana", "Asia/Kolkata", "Asia/Kathmandu"} {
 		t.Run(zone, func(t *testing.T) {
@@ -152,6 +154,9 @@ func TestDaysMatchHits(t *testing.T) {
 			s := dayStats(t, loc, zone != "UTC")
 			now := time.Now()
 			seedDays(t, s.db, loc, now, 420)
+			if err := s.loadLive(context.Background()); err != nil || !s.live.on {
+				t.Fatalf("live: %v", err)
+			}
 			page := []string{"sources", "pages", "countries", "devices", "crawlers"}
 			for _, f := range dayFilters {
 				for _, rg := range ranges {
@@ -608,5 +613,316 @@ func TestTidyFromToday(t *testing.T) {
 	var n int
 	if s.db.db.QueryRow(`SELECT COUNT(*) FROM hits_days WHERE day = ?`, old).Scan(&n); n != 0 {
 		t.Fatal("a day before the horizon is still kept")
+	}
+}
+
+// liveRows is how many hits memory holds, and how many the store has
+// from memory's first instant on.
+func liveRows(t *testing.T, s *Stats) (mem, store int) {
+	t.Helper()
+	s.live.mu.RLock()
+	mem, start := len(s.live.rows), s.live.start
+	s.live.mu.RUnlock()
+	s.db.db.QueryRow(`SELECT COUNT(*) FROM hits WHERE ts >= ?`, start).Scan(&store)
+	return mem, store
+}
+
+// TestLiveMatchHits: the short ranges, which memory answers alone,
+// under filters the store's SQL would take apart differently — one
+// crawler, a browser with a country, a word no hit has — read the same
+// from memory as from the store.
+func TestLiveMatchHits(t *testing.T) {
+	for _, zone := range []string{"UTC", "America/Los_Angeles"} {
+		loc, _ := time.LoadLocation(zone)
+		s := dayStats(t, loc, true)
+		now := time.Now()
+		seedDays(t, s.db, loc, now, 9)
+		var crawls []Hit // both crawlers today, whatever the seed's dice said
+		for i, bot := range []string{"Googlebot", "Bingbot", "Googlebot"} {
+			crawls = append(crawls, Hit{TS: now.Add(-time.Duration(i+1) * time.Minute).UnixMilli(), VID: "c" + bot, SID: "c" + bot,
+				Entry: true, Path: fmt.Sprintf("/c/%d", i), Kind: "page", Device: "bot", Browser: bot, Bot: true, Country: "US"})
+		}
+		if err := s.db.Add(crawls); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.loadLive(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		filters := append([]Filter{{Bot: "Googlebot"}, {Browser: "Chrome", Country: "US"}, {Country: "ZZ"}, {Bot: "Nobot"},
+			{Campaign: "fall"}, {Source: "google"}, {Region: "Tokyo", City: "Shibuya"}, {Lang: "ja", OS: "iOS"}}, dayFilters...)
+		for _, f := range filters {
+			for _, rg := range []string{"today", "yesterday", "24h", "7d"} {
+				if got, want := reportJSON(t, s, rg, f, nil, now), rawly(t, s, rg, f, nil, now); got != want {
+					t.Fatalf("%s %s %+v:\n live %s\n hits %s", zone, rg, f, got, want)
+				}
+			}
+		}
+	}
+}
+
+// TestLiveFeeds: the batches Add commits after the load are in memory,
+// and the reports with them.
+func TestLiveFeeds(t *testing.T) {
+	s := dayStats(t, time.UTC, false)
+	now := time.Now()
+	seedDays(t, s.db, time.UTC, now, 3)
+	if err := s.loadLive(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	for i := range 50 {
+		if err := s.db.Add([]Hit{{TS: time.Now().UnixMilli(), VID: fmt.Sprintf("n%d", i%7), SID: fmt.Sprintf("n%d", i%7), Entry: i < 7,
+			Path: fmt.Sprintf("/n/%d", i%5), Kind: "page", Channel: "direct", Country: "JP"}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if mem, store := liveRows(t, s); mem != store {
+		t.Fatalf("memory holds %d hits, the store %d", mem, store)
+	}
+	if got, want := reportJSON(t, s, "today", Filter{}, nil, now.Add(time.Second)), rawly(t, s, "today", Filter{}, nil, now.Add(time.Second)); got != want {
+		t.Fatalf("after Add:\n live %s\n hits %s", got, want)
+	}
+}
+
+// TestLiveLoadWhileWriting: a batch committed while the load reads is
+// in memory once, whether the load saw it or not.
+func TestLiveLoadWhileWriting(t *testing.T) {
+	s := dayStats(t, time.UTC, true)
+	now := time.Now()
+	seedDays(t, s.db, time.UTC, now, 2)
+	liveLoaded = func(before bool) { // one the load reads and waits for both, one it only waits for
+		s.db.Add([]Hit{{TS: time.Now().UnixMilli(), VID: "w", SID: "w", Entry: before, Path: "/w", Kind: "page"}})
+	}
+	defer func() { liveLoaded = nil }()
+	if err := s.loadLive(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if mem, store := liveRows(t, s); mem != store {
+		t.Fatalf("memory holds %d hits, the store %d", mem, store)
+	}
+}
+
+// TestLiveAdvance: past a midnight, memory lets its oldest day go —
+// and its words — and still answers the same.
+func TestLiveAdvance(t *testing.T) {
+	s := dayStats(t, time.UTC, false)
+	now := time.Now()
+	seedDays(t, s.db, time.UTC, now, 3)
+	if err := s.db.Add([]Hit{{TS: liveFrom(now, time.UTC) + 3600000, VID: "oldest", SID: "oldest", Entry: true, Path: "/old", Kind: "page"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.loadLive(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	words := len(s.live.dict.words)
+	later := now.Add(24 * time.Hour)
+	s.live.mu.Lock()
+	s.live.advance(later, time.UTC)
+	s.live.mu.Unlock()
+	if s.live.start != liveFrom(later, time.UTC) || len(s.live.dict.words) >= words {
+		t.Fatalf("start %v, %d words of %d", time.UnixMilli(s.live.start).UTC(), len(s.live.dict.words), words)
+	}
+	for _, r := range s.live.rows {
+		if r.ts < s.live.start {
+			t.Fatal("a hit from before memory's start")
+		}
+	}
+	w := want{hours: true, firsts: true, dims: []string{"path", "country", "exit", "entry"}}
+	a, b := s.live.start, now.UnixMilli()+1
+	got, ok := s.liveOver(Filter{}, a, b, w)
+	if !ok {
+		t.Fatal("memory does not answer its own stretch")
+	}
+	ref, err := s.hitsOver(Filter{}, a, b, w, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.tally != ref.tally || len(got.lists["path"]) != len(ref.lists["path"]) || len(got.firsts) != len(ref.firsts) {
+		t.Fatalf("memory %+v %d paths, store %+v %d paths", got.tally, len(got.lists["path"]), ref.tally, len(ref.lists["path"]))
+	}
+}
+
+// TestLiveSweep: a sweep into memory's hours moves its start there.
+func TestLiveSweep(t *testing.T) {
+	s := dayStats(t, time.UTC, false)
+	now := time.Now()
+	seedDays(t, s.db, time.UTC, now, 3)
+	if err := s.loadLive(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	cut := liveFrom(now, time.UTC) + 3*3600*1000
+	if _, err := s.Sweep(time.UnixMilli(cut)); err != nil {
+		t.Fatal(err)
+	}
+	if s.live.start != cut {
+		t.Fatalf("memory starts at %d, the sweep cut at %d", s.live.start, cut)
+	}
+	if mem, store := liveRows(t, s); mem != store {
+		t.Fatalf("memory holds %d hits, the store %d", mem, store)
+	}
+	for _, rg := range []string{"24h", "7d"} {
+		if got, want := reportJSON(t, s, rg, Filter{}, nil, now), rawly(t, s, rg, Filter{}, nil, now); got != want {
+			t.Fatalf("%s after the sweep:\n live %s\n hits %s", rg, got, want)
+		}
+	}
+}
+
+// TestLiveMax: past maxLive, a site's hits stay in the store.
+func TestLiveMax(t *testing.T) {
+	defer func(n int) { maxLive = n }(maxLive)
+	maxLive = 10
+	s := dayStats(t, time.UTC, false)
+	now := time.Now()
+	seedDays(t, s.db, time.UTC, now, 3)
+	if err := s.loadLive(context.Background()); err != nil || s.live.on {
+		t.Fatalf("on %v (%v)", s.live.on, err)
+	}
+	if got, want := reportJSON(t, s, "today", Filter{}, nil, now), rawly(t, s, "today", Filter{}, nil, now); got != want {
+		t.Fatalf("over the most:\n got %s\n hits %s", got, want)
+	}
+}
+
+// TestLiveFeedAfterCommit: a load that begins while a batch is between
+// its commit and its feed has the batch once.
+func TestLiveFeedAfterCommit(t *testing.T) {
+	s := dayStats(t, time.UTC, true)
+	seedDays(t, s.db, time.UTC, time.Now(), 2)
+	loaded := make(chan error, 1)
+	addCommitted = func() {
+		addCommitted = nil
+		go func() { loaded <- s.loadLive(context.Background()) }()
+		time.Sleep(100 * time.Millisecond) // the load would read the batch now, were it not held
+	}
+	defer func() { addCommitted = nil }()
+	if err := s.db.Add([]Hit{{TS: time.Now().UnixMilli(), VID: "d", SID: "d", Entry: true, Path: "/d", Kind: "page"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-loaded; err != nil {
+		t.Fatal(err)
+	}
+	if mem, store := liveRows(t, s); mem != store {
+		t.Fatalf("memory holds %d hits, the store %d", mem, store)
+	}
+}
+
+// TestLiveSweepWhileLoading: a sweep committed while memory loads takes
+// its hits from memory too — the loaded ones and the waiting ones.
+func TestLiveSweepWhileLoading(t *testing.T) {
+	s := dayStats(t, time.UTC, true)
+	now := time.Now()
+	seedDays(t, s.db, time.UTC, now, 3)
+	from := liveFrom(now, time.UTC)
+	liveLoaded = func(before bool) {
+		if before {
+			return
+		}
+		s.db.Add([]Hit{{TS: from + 3600000, VID: "p", SID: "p", Entry: true, Path: "/p", Kind: "page"}})
+		s.Sweep(time.UnixMilli(from + 2*3600000))
+	}
+	defer func() { liveLoaded = nil }()
+	if err := s.loadLive(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if mem, store := liveRows(t, s); mem != store || s.live.start != from+2*3600000 {
+		t.Fatalf("memory holds %d hits from %d, the store %d", mem, s.live.start, store)
+	}
+}
+
+// TestLiveReusedID: a hit whose id the store gave again — the last one
+// swept away while memory loaded — is in memory.
+func TestLiveReusedID(t *testing.T) {
+	s := dayStats(t, time.UTC, true)
+	now := time.Now()
+	seedDays(t, s.db, time.UTC, now, 2)
+	old := liveFrom(now, time.UTC) - 3600000 // before memory's days, and the last id
+	if err := s.db.Add([]Hit{{TS: old, VID: "o", SID: "o", Entry: true, Path: "/o", Kind: "page"}}); err != nil {
+		t.Fatal(err)
+	}
+	var last int64
+	s.db.db.QueryRow(`SELECT MAX(id) FROM hits`).Scan(&last)
+	liveLoaded = func(before bool) {
+		if before {
+			return
+		}
+		s.Sweep(time.UnixMilli(old + 1))
+		s.db.Add([]Hit{{TS: time.Now().UnixMilli(), VID: "r", SID: "r", Entry: true, Path: "/r", Kind: "page"}})
+	}
+	defer func() { liveLoaded = nil }()
+	if err := s.loadLive(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	var reused int64
+	s.db.db.QueryRow(`SELECT id FROM hits WHERE vid = 'r'`).Scan(&reused)
+	if mem, store := liveRows(t, s); mem != store {
+		t.Fatalf("memory holds %d hits, the store %d (id %d given again: %v)", mem, store, reused, reused == last)
+	}
+}
+
+// TestLiveMaxWaiting: hits waiting through a load count toward maxLive,
+// and so does a batch before it joins.
+func TestLiveMaxWaiting(t *testing.T) {
+	defer func(n int) { maxLive = n }(maxLive)
+	s := dayStats(t, time.UTC, true)
+	now := time.Now()
+	maxLive = 1 << 20
+	batch := func(n int) []Hit {
+		var hs []Hit
+		for i := range n {
+			hs = append(hs, Hit{TS: time.Now().UnixMilli(), VID: fmt.Sprintf("m%d", i), SID: fmt.Sprintf("m%d", i), Entry: true, Path: "/m", Kind: "page"})
+		}
+		return hs
+	}
+	seedDays(t, s.db, time.UTC, now, 1)
+	var store int
+	s.db.db.QueryRow(`SELECT COUNT(*) FROM hits WHERE ts >= ?`, liveFrom(now, time.UTC)).Scan(&store)
+	maxLive = store + 10
+	waiting := -1
+	liveLoaded = func(before bool) {
+		if !before {
+			s.db.Add(batch(20))
+			s.live.mu.RLock()
+			waiting = len(s.live.pending)
+			s.live.mu.RUnlock()
+		}
+	}
+	defer func() { liveLoaded = nil }()
+	if err := s.loadLive(context.Background()); err != nil || s.live.on || waiting != 0 {
+		t.Fatalf("waiting past the most: on %v, %d batches waited (%v)", s.live.on, waiting, err)
+	}
+	liveLoaded = nil
+	maxLive = 1 << 20
+	if err := s.loadLive(context.Background()); err != nil || !s.live.on {
+		t.Fatalf("reloaded: on %v (%v)", s.live.on, err)
+	}
+	mem, _ := liveRows(t, s)
+	maxLive = mem + 5
+	if err := s.db.Add(batch(20)); err != nil {
+		t.Fatal(err)
+	}
+	if s.live.on || len(s.live.rows) != 0 {
+		t.Fatalf("a batch past the most: on %v, %d rows", s.live.on, len(s.live.rows))
+	}
+}
+
+// TestLivePendingCopied: a batch waiting through a load is its own, not
+// the caller's buffer, which the collector fills again with the next.
+func TestLivePendingCopied(t *testing.T) {
+	s := dayStats(t, time.UTC, true)
+	now := time.Now()
+	seedDays(t, s.db, time.UTC, now, 1)
+	liveLoaded = func(before bool) {
+		if before {
+			return
+		}
+		buf := []Hit{{TS: time.Now().UnixMilli(), VID: "a", SID: "a", Entry: true, Path: "/a", Kind: "page"}}
+		s.db.Add(buf)
+		buf[0] = Hit{TS: time.Now().UnixMilli(), VID: "b", SID: "b", Entry: true, Path: "/b", Kind: "page"}
+		s.db.Add(buf)
+	}
+	defer func() { liveLoaded = nil }()
+	if err := s.loadLive(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := reportJSON(t, s, "today", Filter{}, nil, now.Add(time.Second)), rawly(t, s, "today", Filter{}, nil, now.Add(time.Second)); got != want {
+		t.Fatalf("after a reused buffer:\n live %s\n hits %s", got, want)
 	}
 }

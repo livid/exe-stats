@@ -57,6 +57,15 @@ a filtered view's days are counted the first time a report asks, kept
 while it is read (32 views at most, a week unread at most). The numbers
 are the same as the hits' own to the last one, page lists and JSON alike.
 
+Nor does a report read today's hits back from the store. `Run` loads
+the last three days' hits into memory, and every batch the writer
+commits joins them, so today, the 24 hours and the 24 before them are
+summed there: on every core at once, a shard of visitors each, which add
+up as the days do. A site with more than four million hits in three
+days, about 180 bytes a hit in memory, reads them from the store as
+before; so does a host that never calls `Run`, or writes hits around
+`DB().Add`.
+
 `Options.Reader` is a second pool on the same file, read-only, for the
 reports to read through. With one a report runs as many of its queries
 at once as the pool has connections, and counts that many days at once:
@@ -71,7 +80,9 @@ Over five million hits in a month on one site, with a connection a core
 on 20 cores, a month's desk is read in 0.2 s (every list, as the JSON
 has them, 0.3 s) where it took 113 s from the hits; the month is counted
 in 5 s when it was never counted before, and a filtered month's first
-reading takes about a second.
+reading takes about a second. At a million hits a day, as v2ex.com
+sends, today's part of a desk took 1.9 s from the store and takes 0.1 s
+from memory, and the 24 hours 0.26 s where they took 10.5 s.
 
 ## What the desk shows
 
