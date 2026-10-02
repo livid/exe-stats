@@ -41,7 +41,7 @@
   <div class="frame">
     <div class="body">
       {{range .Sites}}<div class="site" id="s-{{.ID}}">
-        <div class="sline">{{if .Icon}}<img class="ico" src="/sites/{{.ID}}/icon?v={{.Stamp}}" width="16" height="16" alt="">{{end}}<a class="name" href="/sites/{{.ID}}">{{.Domain}}</a><span class="tv">{{.Today}}</span><span class="st"><span class="sep"> · </span>{{if .Counting}}Counting{{else}}Resting{{end}}</span></div>
+        <div class="sline">{{if .Icon}}<img class="ico" src="/sites/{{.ID}}/icon?v={{.Stamp}}" width="16" height="16" alt="">{{end}}<a class="name" href="/sites/{{.ID}}">{{.Domain}}</a><span class="tv"><span class="on" title="Online: who opened a page in the last five minutes"><svg class="users" viewBox="0 0 16 12" width="16" height="12" aria-hidden="true"><path d="M10 0h3v1H10zM3 1h3v1H3zM9 1h5v1H9zM2 2h5v1H2zM9 2h5v1H9zM2 3h5v1H2zM9 3h5v1H9zM2 4h5v1H2zM10 4h3v1H10zM3 5h3v1H3zM9 6h5v1H9zM2 7h5v1H2zM8 7h7v1H8zM1 8h7v1H1zM9 8h7v1H9zM0 9h9v1H0zM10 9h6v1H10zM0 10h9v1H0zM10 10h6v1H10zM0 11h9v1H0zM10 11h6v1H10z"/></svg><span class="onn">{{.Online}}</span><span class="vh"> online</span></span><canvas class="wheels" width="{{.CounterW}}" height="28" style="width: {{.CounterW}}px" data-n="{{.Wheels}}" data-v="{{.Views}}" role="img" aria-label="{{.ViewsLine}}"></canvas></span><span class="st">{{if .Counting}}Counting{{else}}Resting{{end}}</span></div>
         <a class="bars" href="/sites/{{.ID}}" style="--n: {{len .Bars}}" aria-label="The desk of {{.Domain}}. Today, a bar an hour over yesterday's: {{.Today}}">{{range .Bars}}<i{{with .Class}} class="{{.}}"{{end}} style="--t: {{.H}}px; --y: {{.Y}}px"{{with .Title}} title="{{.}}"{{end}}></i>{{end}}</a>
         <div class="buttons">
           {{if not .Counting}}<form method="post" action="/v1/sites/{{.ID}}/pick"><button class="btn">Count This One</button></form>{{end}}
@@ -81,31 +81,128 @@
 {{template "tiers" .}}
 {{end}}
 <script>
+// the badge's pixel art (badge.py), for the welcome's hero and the Sites
+// rows: its palette, its number wheels and its lamp, on cells of 2 CSS
+// px whose edges fall on whole device pixels at any scale
+const pix = (() => {
+  const INK = { K: "#262626", k: "#000", W: "#fff", I: "#333399", L: "#9999ff", O: "#ff6600", o: "#ffcc99",
+    r: "#a84400", R: "#552200", S: "#999", d: "#555", b: "#bbb", m: "#777",
+    G: "#ccccff", g: "#ebebff" }; // and yesterday, behind: the lavender, paled
+  const DIGITS = [".###. #...# #...# #...# #...# #...# .###.", "..#.. .##.. ..#.. ..#.. ..#.. ..#.. .###.",
+    ".###. #...# ....# ...#. ..#.. .#... #####", ".###. #...# ....# ..##. ....# #...# .###.",
+    "...#. ..##. .#.#. #..#. ##### ...#. ...#.", "##### #.... ####. ....# ....# #...# .###.",
+    "..##. .#... #.... ####. #...# #...# .###.", "##### ....# ...#. ..#.. .#... .#... .#...",
+    ".###. #...# #...# .###. #...# #...# .###.", ".###. #...# #...# .#### ....# ...#. .##.."].map(d => d.split(" "));
+  const LAMP = ".###. ##### ##### ##### .###.".split(" ");
+  const GLOW = "..###.. .#...#. #.....# #.....# #.....# .#...#. ..###..".split(" ");
+  // a canvas drawn on cell by cell; sx and sy are its device pixels a cell
+  const painter = cv => {
+    const g = cv.getContext("2d"), p = { g, sx: 1, sy: 1 };
+    p.box = (x, y, w, h, c) => {
+      const x0 = Math.round(x * p.sx), y0 = Math.round(y * p.sy);
+      g.fillStyle = INK[c];
+      g.fillRect(x0, y0, Math.round((x + w) * p.sx) - x0, Math.round((y + h) * p.sy) - y0);
+    };
+    p.grid = (art, x, y, c) => art.forEach((row, r) => { for (let j = 0; j < row.length; j++) if (row[j] === "#") p.box(x + j, y + r, 1, 1, c); });
+    return p;
+  };
+  // where each of n wheels stands for a count, odometer fashion (badge.py's positions)
+  const positions = (v, n) => Array.from({ length: n }, (_, k) => {
+    const q = 10 ** (n - 1 - k);
+    return q === 1 ? v : Math.floor(v / q) + Math.max(0, v % q - (q - 1));
+  });
+  const wheel = (p, x0, y0, pos, last) => {
+    p.box(x0, y0, 7, 11, "k");
+    const [on, turning, away] = last ? ["O", "r", "R"] : ["W", "b", "m"];
+    const d = Math.floor(pos), off = Math.round((pos - d) * 10);
+    for (let k = -1; k <= 1; k++) {
+      const top = y0 + 2 - off + k * 10;
+      DIGITS[(((d + k) % 10) + 10) % 10].forEach((row, r) => {
+        const y = top + r;
+        if (y < y0 || y > y0 + 10) return;
+        // the wheel's curve: a number dims as it turns away
+        const c = y === y0 || y === y0 + 10 ? away : y === y0 + 1 || y === y0 + 9 ? turning : on;
+        for (let j = 0; j < 5; j++) if (row[j] === "#") p.box(x0 + 1 + j, y, 1, 1, c);
+      });
+    }
+  };
+  return {
+    painter,
+    // the counter: n wheels turned to v, the last orange, in a case sunk
+    // into the face whose top left is (cx, cy)
+    counter(p, cx, cy, n, v) {
+      p.box(cx - 1, cy - 1, n * 8 + 2, 1, "S");
+      p.box(cx - 1, cy - 1, 1, 14, "S");
+      p.box(cx, cy, n * 8 + 1, 13, "K");
+      p.box(cx + 1, cy + 1, n * 8 - 1, 11, "d");
+      positions(v, n).forEach((pos, k) => wheel(p, cx + 1 + k * 8, cy + 1, pos, k === n - 1));
+    },
+    // the live lamp, its top left (x, y); lit, it wears a ring a cell out
+    lamp(p, x, y, lit) {
+      p.grid(LAMP, x, y, "O");
+      p.box(x + 1, y + 1, 1, 1, lit ? "W" : "o");
+      if (lit) p.grid(GLOW, x - 1, y - 1, "o");
+    },
+  };
+})();
+</script>
+<script>
 // the numbers live: each site's day and the month's count, from the
 // server's stream while the page is seen (homelive.go); a stream with no
-// word for a minute is dropped and another opened. When a day grows its
-// readers arrive as on the welcome's hero: orange dots fall into the
-// hour under way, a dot a view and three at most a word, and as each
-// lands the bar steps up and the count with it. A new hour, a day drawn
+// word for a minute is dropped and another opened. A row's views are on
+// the hero's wheels, and its lamp lights for each word that brings more;
+// those readers arrive as the hero's do: orange dots fall into the hour
+// under way, a dot a view and three at most a word, and as each lands
+// the bar steps up and the wheels roll on to it. A new hour, a day drawn
 // anew, or a reader who asks for less motion is drawn as it is.
 (() => {
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const words = n => (n === 1 ? "1 view" : n.toLocaleString("en-US") + " views");
+  const snap = v => Math.round(v / 2) * 2; // the hero's 2px cells
+
+  // each row's wheels and lamp, on a canvas of 2px cells: the case's sunk
+  // edge at the left, n wheels, and the lamp 4 cells on
+  const meters = [];
+  const fit = m => {
+    const w = (m.n * 8 + 12) * 2;
+    m.cv.style.width = w + "px";
+    m.cv.width = Math.round(w * devicePixelRatio);
+    m.cv.height = Math.round(28 * devicePixelRatio);
+    m.p.sx = m.cv.width / (w / 2); m.p.sy = m.cv.height / 14;
+    m.drawn = "";
+  };
+  const paint = m => {
+    const k = Math.round(m.shown * 10) + (m.lit > 0 ? "*" : "");
+    if (k === m.drawn) return; // only a frame that differs
+    m.drawn = k;
+    m.p.g.clearRect(0, 0, m.cv.width, m.cv.height);
+    pix.counter(m.p, 1, 1, m.n, m.shown);
+    pix.lamp(m.p, m.n * 8 + 6, 5, m.lit > 0);
+  };
+  for (const cv of document.querySelectorAll("#sites .wheels")) {
+    const m = { cv, p: pix.painter(cv), n: +cv.dataset.n || 5, v: +cv.dataset.v || 0, lit: 0 };
+    m.shown = m.v;
+    cv.closest(".site").meter = m;
+    meters.push(m);
+    fit(m); paint(m);
+  }
+  const count = (row, v) => {
+    const m = row.meter;
+    if (!m) return;
+    m.v = v;
+    m.cv.setAttribute("aria-label", words(v) + " today");
+    if (String(v).length > m.n) { m.n = String(v).length; fit(m); }
+  };
   if (!document.getElementById("sites") || !window.EventSource) return;
   let es = null, quiet = 0;
   const close = () => { if (es) es.close(); es = null; clearTimeout(quiet); };
   const alive = () => { clearTimeout(quiet); quiet = setTimeout(() => { close(); open(); }, 60000); };
-  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const words = n => (n === 1 ? "1 view" : n.toLocaleString("en-US") + " views");
-  const say = (row, box, s, v) => {
-    const t = v === s.v ? s.today : words(v) + s.today.slice(s.today.indexOf(" today"));
-    row.querySelector(".tv").textContent = t;
-    box.setAttribute("aria-label", box.getAttribute("aria-label").replace(/: .*$/, ": " + t));
-  };
+  const label = (box, s, v) => box.setAttribute("aria-label", box.getAttribute("aria-label").replace(/: .*$/, ": " +
+    (v === s.v ? s.today : words(v) + s.today.slice(s.today.indexOf(" today")))));
   const bars = box => box.getElementsByTagName("i");
-  const snap = v => Math.round(v / 2) * 2; // the hero's 2px cells
 
   // the dots in the air, each with what its row shows once it lands
   const air = [];
-  let raf = 0;
   const ground = row => {
     for (const d of air.filter(d => d.row === row)) { air.splice(air.indexOf(d), 1); if (d.el) d.el.remove(); }
   };
@@ -131,10 +228,26 @@
       L.v = Math.max(L.v, d.v);
       L.h = Math.max(L.h, d.h); // within an hour its bar only grows
       bar.style.setProperty("--t", L.h + "px");
-      say(d.row, d.box, L.s, L.v);
+      count(d.row, L.v);
+      label(d.box, L.s, L.v);
     }
-    raf = air.length ? requestAnimationFrame(fly) : 0;
   };
+  // one clock for the dots and the wheels, running while something moves
+  let raf = 0, last = 0;
+  const frame = ms => {
+    const dt = Math.min(.1, last ? (ms - last) / 1000 : 0);
+    last = ms;
+    fly(ms);
+    let busy = air.length > 0;
+    for (const m of meters) {
+      if (m.shown < m.v) m.shown = Math.min(m.v, m.shown + dt * Math.max(5, (m.v - m.shown) * 8));
+      m.lit = Math.max(0, m.lit - dt);
+      paint(m);
+      busy = busy || m.shown < m.v || m.lit > 0;
+    }
+    if (busy) raf = requestAnimationFrame(frame); else raf = last = 0;
+  };
+  const wake = () => { if (!raf) raf = requestAnimationFrame(frame); };
 
   const draw = h => {
     const used = document.getElementById("used"), bar = document.getElementById("usedbar");
@@ -143,6 +256,7 @@
     for (const s of h.sites) {
       const row = document.getElementById("s-" + s.id), box = row && row.querySelector(".bars");
       if (!box) continue;
+      row.querySelector(".onn").textContent = s.o.toLocaleString("en-US");
       const is = bars(box), reshaped = is.length !== s.bars.length;
       if (reshaped) {
         ground(row); // the box holds its bars alone now
@@ -163,11 +277,13 @@
         ground(row);
         const th = now < 0 ? 0 : s.bars[now].h;
         row.live = { s, i: now, v: s.v, h: th, gv: s.v, gh: th };
-        say(row, box, s, s.v);
+        count(row, s.v);
+        if (row.meter) { row.meter.shown = s.v; paint(row.meter); }
+        label(box, s, s.v);
         continue;
       }
       // the views since the last word, as dots on their way: the bar and
-      // the count keep what they show until each lands
+      // the wheels keep what they show until each lands; the lamp lights now
       const th = s.bars[now].h, n = Math.min(add, 3), t = performance.now();
       for (let k = 1; k <= n; k++) {
         air.push({ row, box, v: L.gv + Math.round(add * k / n), h: snap(L.gh + (th - L.gh) * k / n),
@@ -176,8 +292,8 @@
       if (!n && !air.some(d => d.row === row)) L.h = th; // nothing in the air: as the server draws it
       L.s = s; L.gv = s.v; L.gh = th;
       is[now].style.setProperty("--t", L.h + "px");
-      say(row, box, s, L.v);
-      if (n && !raf) raf = requestAnimationFrame(fly);
+      label(box, s, L.v);
+      if (n) { if (row.meter) row.meter.lit = .3; wake(); }
     }
   };
   const open = () => {
@@ -281,17 +397,7 @@
 (() => {
   const cv = document.getElementById("hero");
   if (!cv || !cv.getContext || !window.ResizeObserver) return;
-  const g = cv.getContext("2d");
-  const INK = { K: "#262626", k: "#000", W: "#fff", I: "#333399", L: "#9999ff", O: "#ff6600", o: "#ffcc99",
-    r: "#a84400", R: "#552200", S: "#999", d: "#555", b: "#bbb", m: "#777",
-    G: "#ccccff", g: "#ebebff" }; // and yesterday, behind: the lavender, paled
-  const DIGITS = [".###. #...# #...# #...# #...# #...# .###.", "..#.. .##.. ..#.. ..#.. ..#.. ..#.. .###.",
-    ".###. #...# ....# ...#. ..#.. .#... #####", ".###. #...# ....# ..##. ....# #...# .###.",
-    "...#. ..##. .#.#. #..#. ##### ...#. ...#.", "##### #.... ####. ....# ....# #...# .###.",
-    "..##. .#... #.... ####. #...# #...# .###.", "##### ....# ...#. ..#.. .#... .#... .#...",
-    ".###. #...# #...# .###. #...# #...# .###.", ".###. #...# #...# .#### ....# ...#. .##.."].map(d => d.split(" "));
-  const LAMP = ".###. ##### ##### ##### .###.".split(" ");
-  const GLOW = "..###.. .#...#. #.....# #.....# #.....# .#...#. ..###..".split(" ");
+  const p = pix.painter(cv), g = p.g, box = p.box;
   // an hour's readers, the busiest 1: quiet small hours, a morning
   // climb, the afternoon's top, a long evening; each day a little
   // different, and yesterday's drawn pale behind today's
@@ -308,36 +414,9 @@
 
   // the layout, in cells: the counter at the chart's left with the lamp
   // beside it, and the readers falling from the sky to their right
-  let cols = 0, rows = 0, sx = 1, sy = 1, left = 0, pitch = 0, bw = 0, gap = 0, CX = 0, LX = 0;
+  let cols = 0, rows = 0, left = 0, pitch = 0, bw = 0, gap = 0, CX = 0, LX = 0;
   const CY = 5, LY = 9;
-  const box = (x, y, w, h, c) => {
-    const x0 = Math.round(x * sx), y0 = Math.round(y * sy);
-    g.fillStyle = INK[c];
-    g.fillRect(x0, y0, Math.round((x + w) * sx) - x0, Math.round((y + h) * sy) - y0);
-  };
-  const grid = (art, x, y, c) => art.forEach((row, r) => { for (let j = 0; j < row.length; j++) if (row[j] === "#") box(x + j, y + r, 1, 1, c); });
   const height = i => i === hour ? Math.max(1, seen[i] * CELLS) : seen[i] * CELLS; // the hour under way shows from its first minute
-  // where each wheel stands for a count, odometer fashion (badge.py's positions)
-  const positions = v => [0, 1, 2, 3, 4].map(n => {
-    const p = 10 ** (4 - n);
-    return p === 1 ? v : Math.floor(v / p) + Math.max(0, v % p - (p - 1));
-  });
-  const wheel = (n, pos) => {
-    const x0 = CX + 1 + n * 8, y0 = CY + 1;
-    box(x0, y0, 7, 11, "k");
-    const [on, turning, away] = n === 4 ? ["O", "r", "R"] : ["W", "b", "m"];
-    const d = Math.floor(pos), off = Math.round((pos - d) * 10);
-    for (let k = -1; k <= 1; k++) {
-      const top = y0 + 2 - off + k * 10;
-      DIGITS[(((d + k) % 10) + 10) % 10].forEach((row, r) => {
-        const y = top + r;
-        if (y < y0 || y > y0 + 10) return;
-        // the wheel's curve: a number dims as it turns away
-        const c = y === y0 || y === y0 + 10 ? away : y === y0 + 1 || y === y0 + 9 ? turning : on;
-        for (let j = 0; j < 5; j++) if (row[j] === "#") box(x0 + 1 + j, y, 1, 1, c);
-      });
-    }
-  };
   // a dot's way down: it drifts across as it starts to fall, and drops
   // straight onto the bar at the end
   const at = (d, t) => {
@@ -372,15 +451,8 @@
       if (px !== x || py !== y) box(px, py, 2, 2, "o");
       box(x, y, 2, 2, "O");
     }
-    // the counter's case, sunk into the face, and its wheels
-    box(CX - 1, CY - 1, 42, 1, "S");
-    box(CX - 1, CY - 1, 1, 14, "S");
-    box(CX, CY, 41, 13, "K");
-    box(CX + 1, CY + 1, 39, 11, "d");
-    positions(shown).forEach((p, n) => wheel(n, p));
-    grid(LAMP, LX, LY, "O");
-    box(LX + 1, LY + 1, 1, 1, lit > 0 ? "W" : "o");
-    if (lit > 0) grid(GLOW, LX - 1, LY - 1, "o");
+    pix.counter(p, CX, CY, 5, shown);
+    pix.lamp(p, LX, LY, lit > 0);
   };
 
   const step = dt => {
@@ -421,7 +493,7 @@
     cv.width = dp ? dp.inlineSize : Math.round(w * devicePixelRatio);
     cv.height = dp ? dp.blockSize : Math.round(h * devicePixelRatio);
     cols = Math.floor(w / 2); rows = Math.floor(h / 2);
-    sx = cv.width / w * 2; sy = cv.height / h * 2;
+    p.sx = cv.width / w * 2; p.sy = cv.height / h * 2;
     pitch = Math.max(3, Math.min(9, Math.floor((cols - 12) / 24)));
     gap = pitch >= 7 ? 2 : 1; bw = pitch - gap;
     left = Math.floor((cols - (24 * pitch - gap)) / 2);
@@ -740,21 +812,29 @@ dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .field:disabled { background: #ddd; color: #777; }
 .field.snip { font: 11px/14px Monaco, "Courier New", monospace; }
 .site { padding: 0 0 4px; margin: 0 0 12px; border-bottom: 1px solid #bbb; }
-/* the row's line: the site at the left, and at the right one sentence of
-   its day and whether it counts. On a phone the day's words take a line
-   of their own under it: the width decides, not the words, so a count
-   that grows moves nothing */
-.site .sline { display: flex; align-items: baseline; margin: 0; line-height: 16px; }
+/* the row's line: the site at the left; at the right who is on it now,
+   by a figure of two, and today's views on the hero's wheels with its
+   lamp; then whether it counts. On a phone the figure and the wheels
+   take a line of their own under the name, at its right: the width
+   decides, not the numbers, so a count that grows moves nothing */
+.site .sline { display: flex; align-items: center; margin: 0; line-height: 16px; }
 .site .name { font-weight: bold; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.site .ico { flex: none; align-self: center; width: 16px; height: 16px; margin-right: 6px; }
-.site .tv { margin-left: auto; padding-left: 12px; color: #555; white-space: nowrap; }
-.site .st { color: #555; white-space: pre; }
+.site .ico { flex: none; width: 16px; height: 16px; margin-right: 6px; }
+.site .tv { display: flex; align-items: center; gap: 12px; margin-left: auto; padding-left: 12px; color: #555; white-space: nowrap; }
+.site .on { display: flex; align-items: center; gap: 5px; }
+/* the figure of two: a glyph on the pixel grid, crisp at whole ratios and
+   smoothed between 1 and 2, as the trail's chevron is */
+.site .users { display: block; flex: none; width: 16px; height: 12px; fill: #555; shape-rendering: crispEdges; }
+@media (min-resolution: 1.01dppx) and (max-resolution: 1.99dppx) { .site .users { shape-rendering: geometricPrecision; } }
+.site .wheels { display: block; flex: none; height: 28px; image-rendering: pixelated; }
+.site .st { padding-left: 12px; color: #555; white-space: nowrap; }
 @media (max-width: 479px) {
   .site .sline { flex-wrap: wrap; row-gap: 4px; }
-  .site .tv { order: 1; flex-basis: 100%; min-width: 0; margin-left: 0; padding-left: 0; overflow: hidden; text-overflow: ellipsis; }
-  .site .st { margin-left: auto; padding-left: 12px; }
-  .site .st .sep { display: none; }
+  .site .tv { order: 1; flex-basis: 100%; justify-content: flex-end; margin-left: 0; padding-left: 0; } /* the wheels keep their place */
+  .site .st { margin-left: auto; }
 }
+/* words for a screen reader alone */
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 /* a site's day, drawn as the welcome's hero draws one (badge.py's
    palette): a bar an hour across the row, standing on a floor line;
    today's lavender under an indigo cap, the hour under way peach under

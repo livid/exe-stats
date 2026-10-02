@@ -33,21 +33,27 @@ type liveHome struct {
 }
 
 type liveSite struct {
-	ID    string    `json:"id"`
-	Today string    `json:"today"`
-	Views int       `json:"v"` // today's, the number in Today: the page counts up to it as its dots land
-	Bars  []barView `json:"bars"`
+	ID     string    `json:"id"`
+	Today  string    `json:"today"`
+	Views  int       `json:"v"` // today's: the wheels count up to it as the dots land
+	Online int       `json:"o"`
+	Bars   []barView `json:"bars"`
 }
 
-// siteDay is a site's day as last drawn — its bars, and its views and
-// who is online in words — for every stream and page that asks within a
-// tick; and the day before, which the bars stand over.
+// dayView is a site's day as its row draws it.
+type dayView struct {
+	Bars   []barView
+	Today  string // its views and who is online, in words: the chart's label
+	Views  int
+	Online int
+}
+
+// siteDay is a site's day as last drawn, for every stream and page that
+// asks within a tick; and the day before, which the bars stand over.
 type siteDay struct {
 	mu     sync.Mutex
 	at     time.Time
-	bars   []barView
-	today  string
-	views  int
+	view   dayView
 	ago    []stats.Point // yesterday's chart
 	agoAt  time.Time     // read then
 	agoFor string        // for the day that began then (today's first hour)
@@ -56,15 +62,15 @@ type siteDay struct {
 // dayOf is a site's day, drawn afresh when the one held is older than
 // most of a tick. Yesterday is over, so it is read again only a minute
 // on (a hit may still be on its way past midnight) or on a new day.
-func dayOf(d *siteDay, st *stats.Stats, now time.Time) ([]barView, string, int, error) {
+func dayOf(d *siteDay, st *stats.Stats, now time.Time) (dayView, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if !d.at.IsZero() && now.Sub(d.at) < liveTick*3/4 && now.After(d.at) {
-		return d.bars, d.today, d.views, nil
+		return d.view, nil
 	}
 	pts, err := st.Today(now)
 	if err != nil {
-		return nil, "", 0, err
+		return dayView{}, err
 	}
 	day := ""
 	if len(pts) > 0 {
@@ -73,14 +79,15 @@ func dayOf(d *siteDay, st *stats.Stats, now time.Time) ([]barView, string, int, 
 	if d.ago == nil || d.agoFor != day || now.Sub(d.agoAt) > time.Minute || !now.After(d.agoAt) {
 		ago, err := st.Yesterday(now)
 		if err != nil {
-			return nil, "", 0, err
+			return dayView{}, err
 		}
 		d.ago, d.agoAt, d.agoFor = ago, now, day
 	}
 	bars, views := drawDay(pts, d.ago)
-	d.bars, d.today, d.views = bars, dayLine(viewWords(views)+" today", st.Online()), views
+	online := st.Online()
+	d.view = dayView{Bars: bars, Today: dayLine(viewWords(views)+" today", online), Views: views, Online: online}
 	d.at = now
-	return d.bars, d.today, d.views, nil
+	return d.view, nil
 }
 
 // homeNow is what the stream says of an owner's account now.
@@ -112,11 +119,11 @@ func (a *App) homeNow(addr string, now time.Time) (liveHome, error) {
 	a.mu.Unlock()
 	h.Sites = []liveSite{}
 	for _, o := range all { // with the app let go
-		bars, today, views, err := dayOf(o.day, o.st, now)
+		v, err := dayOf(o.day, o.st, now)
 		if err != nil {
 			continue // removed meanwhile, its file closed
 		}
-		h.Sites = append(h.Sites, liveSite{ID: o.id, Today: today, Views: views, Bars: bars})
+		h.Sites = append(h.Sites, liveSite{ID: o.id, Today: v.Today, Views: v.Views, Online: v.Online, Bars: v.Bars})
 	}
 	return h, nil
 }

@@ -198,8 +198,15 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     await page.goto(APP + '/');
     ok(await page.locator('#sites .snip, #sites .copy').count() === 0, 'the Sites window carries no snippet');
     ok((await page.locator('.site .name').innerText()) === 'shop.example', 'the domain is read out of a pasted address');
-    ok((await page.locator('.site .st').innerText()).trim() === '· Counting', 'the site counts, said after its day', await page.locator('.site .st').innerText());
-    ok((await page.locator('.site .tv').innerText()) === '0 views today · 0 online', "the site's day is empty yet, and nobody is on it", await page.locator('.site .tv').innerText());
+    ok((await page.locator('.site .st').innerText()) === 'Counting', 'the site counts', await page.locator('.site .st').innerText());
+    const empty = await page.evaluate(() => {
+      const cv = document.querySelector('.site .wheels'), d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+      let inked = 0;
+      for (let i = 3; i < d.length; i += 4) if (d[i]) inked++;
+      return { label: cv.getAttribute('aria-label'), on: document.querySelector('.site .onn').textContent, w: cv.getBoundingClientRect().width, h: cv.getBoundingClientRect().height, dev: cv.width, inked };
+    });
+    ok(empty.label === '0 views today' && empty.on === '0', "the site's day is empty yet, and nobody is on it", empty);
+    ok(empty.w === (5 * 8 + 12) * 2 && empty.h === 28 && empty.dev === empty.w && empty.inked > 0, 'its views are on five of the hero\'s wheels, drawn, with the lamp', empty);
     for (const sel of ['.add .field', '.add .btn', '.site .buttons .btn']) {
       const b = await box(page, sel);
       ok(Math.round(b.height) === 20, sel + ' is 20px high', b);
@@ -216,6 +223,17 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
       window.__dots = 0;
       new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if (n.className === 'dot') window.__dots++; })))
         .observe(document.getElementById('sites'), { subtree: true, childList: true });
+    });
+    // and the lamp lights when a word brings views: watch its highlight cell
+    await page.evaluate(() => {
+      window.__lit = false;
+      const cv = document.querySelector('.site .wheels');
+      const look = () => {
+        const n = cv.closest('.site').meter.n, cw = cv.width / (n * 8 + 12), ch = cv.height / 14;
+        const px = cv.getContext('2d').getImageData(Math.floor((n * 8 + 7.5) * cw), Math.floor(6.5 * ch), 1, 1).data;
+        if (px[0] === 255 && px[1] === 255 && px[2] === 255) window.__lit = true; else requestAnimationFrame(look);
+      };
+      requestAnimationFrame(look);
     });
     const set = await rich.ctx.newPage();
     set.errors = [];
@@ -258,11 +276,13 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     await set.close();
 
     // ---- the Sites window, left open, counts the views as they come ----
-    const liveDay = await page.waitForFunction(() => document.querySelector('.site .tv').textContent === '3 views today · 1 online'
+    const liveDay = await page.waitForFunction(() => document.querySelector('.site .wheels').getAttribute('aria-label') === '3 views today'
+      && document.querySelector('.site .onn').textContent === '1' && document.querySelector('.site').meter.shown === 3
       && getComputedStyle(document.querySelector('.site .bars i.now'), '::after').height === '40px'
       && /^3 of /.test(document.getElementById('used').parentElement.textContent), null, { timeout: 10000 }).then(() => true).catch(() => false);
     ok(liveDay, "the open page's day, its bar and the month's count follow the views without a reload",
-      await page.evaluate(() => [document.querySelector('.site .tv').textContent, document.getElementById('used').textContent]));
+      await page.evaluate(() => [document.querySelector('.site .wheels').getAttribute('aria-label'), document.querySelector('.site .onn').textContent, document.getElementById('used').textContent]));
+    ok(await page.evaluate(() => window.__lit), 'the lamp lit for a word that brought views');
     await page.waitForFunction(() => !document.querySelector('.site .dot'), null, { timeout: 5000 }).catch(() => {});
     const fell = await page.evaluate(() => [window.__dots, document.querySelectorAll('.site .dot').length]);
     ok(fell[0] >= 1 && fell[0] <= 3 && fell[1] === 0, 'the views fell into the hour as dots, a dot a view, and every one has landed', fell);
@@ -280,12 +300,13 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
         to: bars.filter(x => x.className === 'to').length, w: b.width, rw: row.width, h: b.height, floor: getComputedStyle(document.querySelector('.site .bars')).borderBottom,
         first: bars[0].getBoundingClientRect().left - b.left, last: b.right - bars[bars.length - 1].getBoundingClientRect().right,
         sky: bars[0].getBoundingClientRect().top - b.top, slot: bars[0].getBoundingClientRect().height,
-        oneLine: Math.round(line.height) === 16 && Math.round(tv.top) === Math.round(st.top) && st.right <= line.right + 0.5, tv: document.querySelector('.site .tv').textContent };
+        oneLine: Math.round(line.height) === 28 && Math.abs((tv.top + tv.bottom) - (st.top + st.bottom)) <= 1 && st.right <= line.right + 0.5,
+        tv: document.querySelector('.site .wheels').getAttribute('aria-label') + ' · ' + document.querySelector('.site .onn').textContent + ' online' };
     });
     ok(day.n >= 23 && day.n <= 25 && day.now.length === 1 && day.now[0][0] === '40px' && day.now[0][1] === 'rgb(255, 102, 0)' && day.now[0][2] === 'rgb(255, 204, 153)',
       "the day is a bar an hour, this hour's the busiest and still filling, in the hero's orange", day);
     ok(day.ghost[0] === 'rgb(235, 235, 255)' && day.ghost[1] === '0px', 'yesterday stands pale behind each hour: empty, as nothing came yesterday', day.ghost);
-    ok(day.tv === '3 views today · 1 online' && day.oneLine, "its views and who is on it in words, on the name's line before Counting", day);
+    ok(day.tv === '3 views today · 1 online' && day.oneLine, "who is on it and its views on the wheels, on the name's line before Counting", day);
     ok(Math.round(day.w) === Math.round(day.rw) && day.first === 0 && day.last === 0 && Math.round(day.h) === 49 && day.sky === 8 && day.slot === 40 && day.floor.startsWith('1px solid'),
       'the day is the row wide, 40px under 8px of sky and over a floor line', day);
     ok(await page.locator('.site .bars').getAttribute('href') === `/sites/${siteId}` && await page.locator('.site .bars').evaluate(e => getComputedStyle(e).cursor) === 'pointer',
@@ -425,7 +446,7 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
       const bars = await c.page.evaluate(() => [...document.querySelectorAll('.site .bars i')].map(x => x.getBoundingClientRect().width));
       ok(bars.length > 0 && bars.every(w => w === bars[0]) && bars[0] >= 6 && bars[0] % 2 === 0, `${tag}: a site's bars are one width, in whole 2px steps`, bars.slice(0, 3));
       const words = await c.page.evaluate(() => { const l = document.querySelector('.site .sline').getBoundingClientRect(), t = document.querySelector('.site .tv').getBoundingClientRect(); return [t.left >= l.left - 0.5 && t.right <= l.right + 0.5, Math.round(l.height)]; });
-      ok(words[0] && words[1] === (v.phone ? 36 : 16), `${tag}: the day's words fit the row's line (under the name on a phone)`, words);
+      ok(words[0] && words[1] === (v.phone ? 48 : 28), `${tag}: the online count and the wheels fit the row's line (under the name on a phone)`, words);
       await shot(c.page, 'account-' + tag);
       await c.page.goto(`${APP}/sites/${siteId}/settings`);
       ok(await c.page.locator('#setup.ok').count() === 1 && await noScroll(c.page), `${tag}: the settings show the green check and do not scroll sideways`);

@@ -96,7 +96,12 @@ type siteRow struct {
 	Icon       bool   // the site's favicon is kept (siteicon.go)
 	Stamp      string // and its hash, in its URL
 	Bars       []barView
-	Today      string // the day's views, in words
+	Today      string // the day's views and who is online, in words: the chart's label
+	Views      int    // today's, on the badge's wheels
+	ViewsLine  string // and in words
+	Wheels     int    // how many: five, or as many as its digits
+	CounterW   int    // the wheels' canvas with its lamp, px
+	Online     string
 	st         *stats.Stats
 	day        *siteDay // its day as last drawn, shared with the live streams (homelive.go)
 }
@@ -122,13 +127,21 @@ func (row *siteRow) today(now time.Time) error {
 	if d == nil {
 		d = &siteDay{}
 	}
-	bars, line, _, err := dayOf(d, row.st, now)
+	v, err := dayOf(d, row.st, now)
 	if err != nil {
 		return err
 	}
-	row.Bars, row.Today = bars, line
+	row.Bars, row.Today, row.Views, row.Online = v.Bars, v.Today, v.Views, commas(int64(v.Online))
+	row.ViewsLine = viewWords(v.Views) + " today"
+	row.Wheels = max(5, len(strconv.Itoa(v.Views)))
+	row.CounterW = counterW(row.Wheels)
 	return nil
 }
+
+// counterW is the width of a row's counter, the welcome's hero's on its
+// 2px cells: the sunk case of n wheels, 8 cells a wheel, then the lamp
+// with its ring, 4 cells on (pages.html, pix.counter and pix.lamp).
+func counterW(n int) int { return (n*8 + 12) * 2 }
 
 // dayLine is the words beside a site's day: its views and who is on it
 // now (a page in the last five minutes, as the desk's Live has it).
@@ -364,7 +377,8 @@ func (a *App) fill(d *homeData, ac *acct, r *http.Request, now time.Time) {
 		d.Lines = append(d.Lines, "Paused: the balance covers no tier, so nothing is counted. Everything counted so far is still here to read. Top up and press Check Now.")
 	}
 	for i, s := range ac.sites {
-		row := siteRow{ID: s.ID, Domain: s.Domain, Counting: i < slots}
+		row := siteRow{ID: s.ID, Domain: s.Domain, Counting: i < slots, // and until its day is read, an empty one
+			ViewsLine: "0 views today", Wheels: 5, CounterW: counterW(5), Online: "0"}
 		if e := a.sites[s.ID]; e != nil {
 			row.Icon, row.Stamp = a.iconOf(e, now)
 			if st, err := a.statsOf(e); err == nil {
