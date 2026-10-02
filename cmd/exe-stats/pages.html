@@ -687,6 +687,20 @@ section + section { margin-top: 12px; padding-top: 12px; border-top: 1px solid #
       </form>
       {{end}}<p class="flash{{if and .Fault (eq .SaidIn "ignored")}} fault{{end}}" id="ignored-said" role="status">{{if eq .SaidIn "ignored"}}{{if .Fault}}{{.Fault}}{{else}}{{.Said}}{{end}}{{end}}</p>
       </section>{{end}}
+      <section id="visibility">
+      <h2>Visibility</h2>
+      <p>Private keeps the site's desk to you. Public opens it to anyone with its address, no sign-in needed; the settings stay yours, and search engines are asked not to list it.</p>
+      <form class="style" method="post" action="/v1/sites/{{.ID}}/visibility">
+        <label for="visibility-choice">Desk:</label>
+        <span class="popup"><select id="visibility-choice" name="visibility">{{range .Visibilities}}<option value="{{.Value}}"{{if .On}} selected{{end}}>{{.Name}}</option>{{end}}</select><span class="well"><i><b></b></i></span></span>
+        <noscript><button class="btn">Set</button></noscript>
+      </form>
+      {{if .Public}}<input class="field snip" id="desk-link" readonly value="{{.DeskURL}}" aria-label="The desk's address">
+      <div class="buttons">
+        <button class="btn" id="copy-desk" type="button">Copy Address</button>
+      </div>
+      {{end}}<p class="flash{{if and .Fault (eq .SaidIn "visibility")}} fault{{end}}" id="visibility-said" role="status">{{if eq .SaidIn "visibility"}}{{if .Fault}}{{.Fault}}{{else}}{{.Said}}{{end}}{{end}}</p>
+      </section>
       <section id="badge">
       <h2>Badge</h2>
       <p>An 88×31 button for the site's own pages, with its numbers on it for anyone to read. Hit Counter shows every page view since the site was added on its wheels, beside today's in bars of two hours.</p>
@@ -730,8 +744,22 @@ section + section { margin-top: 12px; padding-top: 12px; border-top: 1px solid #
 {{if .Badge}}{{template "badgejs"}}
 <script>badgeKit(document.getElementById("badge-said"));</script>
 {{end}}<script>
-// the badge's style takes effect when it is chosen
-document.getElementById("badge-style").addEventListener("change", e => e.target.form.submit());
+// a pop-up's choice — the badge's style, the desk's visibility — takes
+// effect when it is chosen
+for (const s of document.querySelectorAll(".style select")) s.addEventListener("change", e => e.target.form.submit());
+// the public desk's address: Copy puts it on the clipboard and says so,
+// or where the clipboard is not offered leaves it selected
+(() => {
+  const f = document.getElementById("desk-link"), said = document.getElementById("visibility-said");
+  if (!f) return;
+  f.addEventListener("focus", () => f.select());
+  document.getElementById("copy-desk").addEventListener("click", () => {
+    f.select();
+    const left = () => { said.textContent = "The address is selected for you to copy."; };
+    if (!navigator.clipboard || !navigator.clipboard.writeText) return left();
+    navigator.clipboard.writeText(f.value).then(() => { said.textContent = "The address is on your clipboard."; }, left);
+  });
+})();
 </script>
 <script>
 (() => {

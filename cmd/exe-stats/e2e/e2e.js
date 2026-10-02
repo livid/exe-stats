@@ -444,6 +444,34 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     ok(bp.url() === `${APP}/`, 'and Sites leads home', bp.url());
     await bp.close();
 
+    // ---- visibility: the desk private until the owner makes it public ----
+    const vp = await rich.ctx.newPage();
+    vp.errors = [];
+    vp.on('pageerror', e => vp.errors.push(String(e)));
+    vp.on('console', m => { if (m.type() === 'error') vp.errors.push(m.text()); });
+    const anon = await context(browser, []);
+    const deskURL = `${APP}/sites/${siteId}`;
+    await anon.page.goto(deskURL);
+    ok(anon.page.url() === `${APP}/`, 'a private desk sends a signed-out reader home', anon.page.url());
+    await vp.goto(`${APP}/sites/${siteId}/settings`);
+    ok(await vp.locator('#visibility-choice').inputValue() === 'private' && await vp.locator('#desk-link').count() === 0, 'a new site is private');
+    const vpop = await box(vp, '#visibility .popup');
+    ok(Math.round(vpop.height) === 19, 'visibility is a 19px pop-up', vpop);
+    await Promise.all([vp.waitForNavigation(), vp.selectOption('#visibility-choice', 'public')]);
+    ok(new URL(vp.url()).hash === '#visibility' && await vp.locator('#visibility-said').innerText() === 'The desk is public: anyone with its address can read it.', 'choosing Public opens the desk, and says so', vp.url());
+    ok(await vp.locator('#badge-said').innerText() === '', 'and says it only there');
+    ok(await vp.locator('#desk-link').inputValue() === deskURL, "the settings hand out the desk's address", await vp.locator('#desk-link').inputValue());
+    await vp.click('#copy-desk');
+    await vp.waitForFunction(() => document.getElementById('visibility-said').textContent.startsWith('The address'), null, { timeout: 3000 }).catch(() => {});
+    const vcopied = await vp.locator('#visibility-said').innerText();
+    ok(/^The address is (on your clipboard|selected for you to copy)\.$/.test(vcopied), 'Copy Address says what it did', vcopied);
+    const open = await anon.page.goto(deskURL + '?range=24h');
+    ok(open.status() === 200 && anon.page.url() === deskURL + '?range=24h' && (await anon.page.title()).includes('shop.example'), 'a public desk opens signed out', [open.status(), anon.page.url()]);
+    ok((await anon.page.request.get(`${APP}/sites/${siteId}/settings`, { maxRedirects: 0 })).status() === 303, 'and its settings still send a signed-out reader home');
+    await shot(anon.page, 'desk-public-dpr1');
+    ok(vp.errors.length === 0 && anon.page.errors.length === 0, 'no script errors with visibility', [vp.errors, anon.page.errors]);
+    await vp.close();
+
     // ---- the account at every scale and on a phone ----
     const cookies = await rich.ctx.cookies();
     ok(cookies.length === 1 && cookies[0].httpOnly && cookies[0].sameSite === 'Lax', 'the session is one HttpOnly, SameSite=Lax cookie');
@@ -475,7 +503,7 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
       await c.page.goto(`${APP}/sites/${siteId}/settings`);
       ok(await c.page.locator('#setup.ok').count() === 1 && await noScroll(c.page), `${tag}: the settings show the green check and do not scroll sideways`);
       const heights = await c.page.locator('#settings .btn:not(.tbox)').evaluateAll(bs => bs.map(x => Math.round(x.getBoundingClientRect().height)));
-      ok(heights.length === 9 && heights.every(h => h === 20), `${tag}: settings buttons are 20px high`, heights);
+      ok(heights.length === 10 && heights.every(h => h === 20), `${tag}: settings buttons are 20px high`, heights);
       // the note: its words, then Ignore at the right, inside the box
       const note = await c.page.evaluate(() => {
         const n = document.querySelector('.notice.ask'), b = n.querySelector('.btn'), t = n.querySelector('span');
@@ -523,10 +551,20 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
       await shot(c.page, 'settings-ignored-' + tag);
       await c.page.locator('#danger').evaluate(x => x.scrollIntoView({ block: 'end' }));
       await shot(c.page, 'settings-danger-' + tag);
+      await c.page.locator('#visibility').evaluate(x => x.scrollIntoView({ block: 'center' }));
+      await shot(c.page, 'settings-visibility-' + tag);
       await c.page.locator('#badge').evaluate(x => x.scrollIntoView({ block: 'end' }));
       await shot(c.page, 'settings-badge-' + tag);
       await c.ctx.close();
     }
+
+    // ---- private again: the desk closes ----
+    await page.goto(`${APP}/sites/${siteId}/settings`);
+    await Promise.all([page.waitForNavigation(), page.selectOption('#visibility-choice', 'private')]);
+    ok(await page.locator('#visibility-said').innerText() === 'The desk is private: only you can read it.' && await page.locator('#desk-link').count() === 0, 'choosing Private closes the desk, and says so');
+    await anon.page.goto(deskURL);
+    ok(anon.page.url() === `${APP}/`, 'the private desk sends a signed-out reader home again', anon.page.url());
+    await anon.ctx.close();
 
     // ---- a stranger: no tier, no adding, and not this desk ----
     const poor = await context(browser, ['Poor']);

@@ -212,6 +212,16 @@ to another is no source. At the foot of the settings a Danger Zone holds
 Remove Site…, which asks before the site and its numbers go; the Sites
 window has no Remove of its own.
 
+**Visibility.** A site's desk is Private until its owner picks Public
+in the settings' Visibility pop-up (`sites.public`). Private, the desk
+and its JSON (`/sites/{id}`, `/v1/sites/{id}/stats`) answer the owner
+and the admins alone; Public, they answer anyone with the address,
+signed in or not, and the settings hand that address out with a Copy
+Address button. Nothing else opens with it — the settings, the setup
+check, the site's icon and the home page's live numbers stay the
+owner's — and `robots.txt` still asks crawlers to keep out of
+`/sites/`. Private again, the desk closes again.
+
 **Signing in** offers each detected wallet by name and icon when more
 than one is installed, as the hub does. It is one signature over a message
 the server issued for that address, never a transaction; the address is
@@ -306,7 +316,6 @@ was verified against SHA-256
 `ec1d45195d90578c24b79b11b90446e34d8da52c395d345232e46d5c3ee9a18c`.
 The binary stays outside Git.
 
-Not built yet: a public link to a desk, more than one wallet on an
-account, a note by email or push when a grace begins, export, a privacy
+Not built yet: more than one wallet on an account, a note by email or push when a grace begins, export, a privacy
 page for the sites' own readers, and closing the files of sites nobody
 has read for a while.

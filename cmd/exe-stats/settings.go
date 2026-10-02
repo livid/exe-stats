@@ -132,6 +132,9 @@ type settingsData struct {
 	Styles                        []styleRow
 	BadgeSrc, BadgeHTML, BadgeMD  string
 	BadgeAlt                      string
+	Public                        bool // anyone may read the desk
+	Visibilities                  []visibilityRow
+	DeskURL                       string // the desk's address, to hand out while it is public
 }
 
 // GET /sites/{id}/settings — a site's settings, for its owner alone.
@@ -162,6 +165,8 @@ func (a *App) handleSettings(w http.ResponseWriter, r *http.Request) {
 	d.Hosts, d.Ignored = hostRows(e.site), e.site.Ignored
 	d.Badge, d.Styles = e.site.Badge, badgeRows(e.site.Badge)
 	d.BadgeSrc, d.BadgeHTML, d.BadgeMD, d.BadgeAlt = a.badgeLinks(r, e.site)
+	d.Public, d.Visibilities = e.site.Public, visibilityRows(e.site.Public)
+	d.DeskURL = a.originOf(r) + "/sites/" + e.site.ID
 	a.mu.Unlock()
 	q := r.URL.Query()
 	d.Said, d.Fault = notes[q.Get("m")], faults[q.Get("e")]

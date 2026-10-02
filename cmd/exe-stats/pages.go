@@ -45,6 +45,8 @@ var notes = map[string]string{
 	"badgeoff":    "The badge is off. A page that still links it shows no picture there.",
 	"ignored":     "That host is ignored: its views are no longer noted here.",
 	"unignored":   "That host's views are noted again.",
+	"public":      "The desk is public: anyone with its address can read it.",
+	"private":     "The desk is private: only you can read it.",
 }
 
 var faults = map[string]string{
@@ -59,25 +61,29 @@ var faults = map[string]string{
 	"failed":  "That did not work. Nothing has changed.",
 	"foreign": "Press the button on this site's own page.",
 	// a site's settings
-	"host":           "That does not read as a host: type it like blog.example.com, or *.example.com.",
-	"counts":         "That host counts already.",
-	"hostmax":        "A site lists at most 20 hosts.",
-	"nohost":         "Choose a host in the list first.",
-	"style":          "That is not one of the badge's styles.",
-	"badgefailed":    "That did not work. Nothing has changed.",
-	"ignorehost":     "That does not read as a host.",
-	"ignorecounts":   "That host counts: its pages are the site's own.",
-	"ignoremax":      "A site ignores at most 20 hosts. Take one off the list below first.",
-	"ignorefailed":   "That did not work. Nothing has changed.",
-	"noignored":      "Choose a host in the list first.",
-	"unignorefailed": "That did not work. Nothing has changed.",
+	"host":             "That does not read as a host: type it like blog.example.com, or *.example.com.",
+	"counts":           "That host counts already.",
+	"hostmax":          "A site lists at most 20 hosts.",
+	"nohost":           "Choose a host in the list first.",
+	"style":            "That is not one of the badge's styles.",
+	"badgefailed":      "That did not work. Nothing has changed.",
+	"ignorehost":       "That does not read as a host.",
+	"ignorecounts":     "That host counts: its pages are the site's own.",
+	"ignoremax":        "A site ignores at most 20 hosts. Take one off the list below first.",
+	"ignorefailed":     "That did not work. Nothing has changed.",
+	"noignored":        "Choose a host in the list first.",
+	"unignorefailed":   "That did not work. Nothing has changed.",
+	"visibility":       "That is not one of the choices.",
+	"visibilityfailed": "That did not work. Nothing has changed.",
 }
 
 // saidIn is the settings section a word answers, by its word: the
-// badge's own, the setup's for the note's Ignore, the ignored list's,
-// and the hosts' for the rest.
+// badge's own, the visibility's, the setup's for the note's Ignore, the
+// ignored list's, and the hosts' for the rest.
 func saidIn(word string) string {
 	switch {
+	case word == "public" || word == "private" || strings.HasPrefix(word, "visibility"):
+		return "visibility"
 	case strings.HasPrefix(word, "badge") || word == "style":
 		return "badge"
 	case strings.HasPrefix(word, "unignore") || word == "noignored":
@@ -638,14 +644,14 @@ func (a *App) handlePickSite(w http.ResponseWriter, r *http.Request) {
 // JSON, for its owner, and to read for an admin.
 func (a *App) handleDesk(w http.ResponseWriter, r *http.Request) {
 	addr := a.signedIn(r)
-	if addr == "" {
-		http.Redirect(w, r, "/", http.StatusSeeOther)
-		return
-	}
 	a.mu.Lock()
 	e := a.sites[r.PathValue("id")]
-	if e == nil || (e.site.Addr != addr && !a.isAdmin(addr)) {
+	if e == nil || !(e.site.Public || addr != "" && (e.site.Addr == addr || a.isAdmin(addr))) {
 		a.mu.Unlock()
+		if addr == "" {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
 		http.NotFound(w, r)
 		return
 	}

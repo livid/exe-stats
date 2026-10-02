@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS sites (
   hosts   TEXT NOT NULL DEFAULT '',        -- more hosts whose pages count, space-separated: blog.example.com, *.example.com
   badge   INTEGER NOT NULL DEFAULT 0,      -- the badge's style (sitebadge.go); 0: none, the numbers kept to the owner
   ignored TEXT NOT NULL DEFAULT '',        -- hosts whose refused views the setup no longer notes, space-separated (ignored.go)
+  public  INTEGER NOT NULL DEFAULT 0,      -- 1: anyone may read the site's desk (visibility.go); 0: its owner alone
   UNIQUE (addr, domain)
 );
 CREATE INDEX IF NOT EXISTS sites_addr ON sites(addr);
@@ -67,9 +68,9 @@ CREATE TABLE IF NOT EXISTS usage (
 	if err != nil {
 		return nil, err
 	}
-	// a file made before the setup check, hosts, the badge or ignored hosts gains its column
+	// a file made before the setup check, hosts, the badge, ignored hosts or visibility gains its column
 	for _, col := range []string{`seen INTEGER NOT NULL DEFAULT 0`, `hosts TEXT NOT NULL DEFAULT ''`, `badge INTEGER NOT NULL DEFAULT 0`,
-		`ignored TEXT NOT NULL DEFAULT ''`} {
+		`ignored TEXT NOT NULL DEFAULT ''`, `public INTEGER NOT NULL DEFAULT 0`} {
 		if _, err := db.Exec(`ALTER TABLE sites ADD COLUMN ` + col); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			return nil, err
 		}
@@ -167,9 +168,10 @@ type Site struct {
 	Hosts                 []string // more hosts that count besides Domain (hosts.go)
 	Badge                 int      // the badge's style, 0 none (sitebadge.go)
 	Ignored               []string // hosts whose refused views are not noted (ignored.go)
+	Public                bool     // anyone may read its desk (visibility.go)
 }
 
-const siteCols = `id, addr, domain, tz, picked, created, seen, hosts, badge, ignored`
+const siteCols = `id, addr, domain, tz, picked, created, seen, hosts, badge, ignored, public`
 
 var errSiteExists = errors.New("that site is already here")
 
@@ -193,7 +195,7 @@ func scanSites(rows *sql.Rows, err error) ([]Site, error) {
 	for rows.Next() {
 		var st Site
 		var hosts, ignored string
-		if err := rows.Scan(&st.ID, &st.Addr, &st.Domain, &st.TZ, &st.Picked, &st.Created, &st.Seen, &hosts, &st.Badge, &ignored); err != nil {
+		if err := rows.Scan(&st.ID, &st.Addr, &st.Domain, &st.TZ, &st.Picked, &st.Created, &st.Seen, &hosts, &st.Badge, &ignored, &st.Public); err != nil {
 			return nil, err
 		}
 		st.Hosts, st.Ignored = strings.Fields(hosts), strings.Fields(ignored)
@@ -241,6 +243,12 @@ func (s *Store) setIgnored(id string, hosts []string) error {
 // setBadge writes down a site's badge style.
 func (s *Store) setBadge(id string, style int) error {
 	_, err := s.db.Exec(`UPDATE sites SET badge=? WHERE id=?`, style, id)
+	return err
+}
+
+// setPublic writes down whether anyone may read a site's desk.
+func (s *Store) setPublic(id string, public bool) error {
+	_, err := s.db.Exec(`UPDATE sites SET public=? WHERE id=?`, public, id)
 	return err
 }
 
