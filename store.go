@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -18,7 +20,23 @@ import (
 // device, a browser, a page and a time.
 
 // DB is the hits tables in the host's database.
-type DB struct{ db *sql.DB }
+type DB struct {
+	db *sql.DB
+	// gen counts the times kept days were dropped for hits written
+	// under them (Add, Sweep), and busy is how many such writes are on
+	// their way: a day counted across either is not kept (keepDay)
+	gen, busy atomic.Int64
+}
+
+// dropping marks a write that drops kept days, from before it begins
+// until after it has committed or not.
+func (d *DB) dropping() func() {
+	d.busy.Add(1)
+	return func() {
+		d.gen.Add(1)
+		d.busy.Add(-1)
+	}
+}
 
 // Open prepares the hits tables in db and returns them. It is safe to
 // call on a database that already has them.
@@ -64,6 +82,35 @@ CREATE INDEX IF NOT EXISTS hits_sid ON hits(sid, ts);
 CREATE TABLE IF NOT EXISTS hits_salt (
   day  TEXT PRIMARY KEY,
   salt BLOB NOT NULL
+);
+
+-- the finished days a report has counted (days.go). A view is the
+-- filters a day was counted under, '' for none; used is when a report
+-- last read it, so a filter nobody looks at any more gives its days back
+CREATE TABLE IF NOT EXISTS hits_views (
+  id     INTEGER PRIMARY KEY AUTOINCREMENT, -- never one a dropped view had
+  filter TEXT NOT NULL UNIQUE,
+  used   INTEGER NOT NULL          -- ms
+);
+-- the parts of the days a view keeps — summary, hours or a list's
+-- dimension — one row a part a day: its cells packed (days.go pack), a
+-- summary's five numbers, an hour's page views and visitors, a list's
+-- every key with its count; a day with nothing in it is known to have
+-- nothing
+CREATE TABLE IF NOT EXISTS hits_days (
+  view INTEGER NOT NULL,
+  part TEXT NOT NULL,
+  day  INTEGER NOT NULL,           -- ms: the day's midnight
+  data BLOB NOT NULL,
+  PRIMARY KEY (view, part, day)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS hits_days_day ON hits_days(day);
+-- what the kept days were counted by: the counting's version and the
+-- zone their midnights are in, either of which, changed, drops them
+-- all; and since when the zone has been this one
+CREATE TABLE IF NOT EXISTS hits_meta (
+  k TEXT PRIMARY KEY,
+  v TEXT NOT NULL
 );`)
 	if err != nil {
 		return err
@@ -93,6 +140,10 @@ type Hit struct {
 
 // StatsAdd writes a batch of hits in one transaction.
 func (d *DB) Add(hits []Hit) error {
+	oldest := int64(math.MaxInt64)
+	for _, h := range hits {
+		oldest = min(oldest, h.TS)
+	}
 	tx, err := d.db.Begin()
 	if err != nil {
 		return err
@@ -114,6 +165,17 @@ func (d *DB) Add(hits []Hit) error {
 		}
 		if _, err := stmt.Exec(h.TS, h.VID, h.SID, entry, h.Path, h.Kind, h.Ref, h.Channel, h.Country, h.Region, h.City,
 			h.Device, h.Browser, h.OS, h.Lang, h.UTMSource, h.UTMMedium, h.UTMCampaign, bot); err != nil {
+			return err
+		}
+	}
+	// a hit for a day that may be kept already — a seeder's, or one that
+	// waited on its way here: every kept day that could hold it, and
+	// every day after, is counted again. It is judged with the write
+	// lock held, by half of sealDelay: a hit judged on time commits long
+	// before its day can be counted.
+	if oldest < time.Now().Add(-sealDelay/2).UnixMilli() {
+		defer d.dropping()()
+		if err := dropDays(tx, ">", oldest-longestDay); err != nil {
 			return err
 		}
 	}
@@ -199,13 +261,18 @@ type Filter struct {
 	Bot                             string
 }
 
-func (f Filter) where() (string, []any) {
+func (f Filter) where() (string, []any) { return f.clause(false) }
+
+// clause is where's; with both, a filter on people's hits (Bot "")
+// takes the crawlers' too, for a pass that sorts them itself (countDay).
+func (f Filter) clause(both bool) (string, []any) {
 	w := []string{"ts >= ?", "ts < ?"}
 	args := []any{f.From, f.To}
-	switch f.Bot {
-	case "":
+	switch {
+	case f.Bot == "" && both:
+	case f.Bot == "":
 		w = append(w, "bot = 0")
-	case "all":
+	case f.Bot == "all":
 		w = append(w, "bot = 1")
 	default:
 		w = append(w, "bot = 1", "browser = ?")
@@ -237,21 +304,49 @@ type Summary struct {
 }
 
 func (d *DB) Summary(f Filter) (Summary, error) {
-	var out Summary
+	t, err := d.tally(f)
+	return t.summary(), err
+}
+
+// tally is a summary in numbers that add up from one stretch to the
+// next: the sessions' time is summed, in ms, rather than averaged.
+type tally struct {
+	Summary
+	durMS int64
+}
+
+func (t *tally) add(u tally) {
+	t.Visitors += u.Visitors
+	t.Pageviews += u.Pageviews
+	t.Sessions += u.Sessions
+	t.Bounces += u.Bounces
+	t.durMS += u.durMS
+}
+
+func (t tally) summary() Summary {
+	s := t.Summary
+	s.Duration = 0
+	if s.Sessions > 0 {
+		s.Duration = float64(t.durMS) / 1000 / float64(s.Sessions)
+	}
+	return s
+}
+
+func (d *DB) tally(f Filter) (tally, error) {
+	var t tally
 	w, args := f.where()
 	if err := d.db.QueryRow(`SELECT COUNT(*), COUNT(DISTINCT vid), COUNT(DISTINCT sid) FROM hits WHERE `+w, args...).
-		Scan(&out.Pageviews, &out.Visitors, &out.Sessions); err != nil {
-		return out, err
+		Scan(&t.Pageviews, &t.Visitors, &t.Sessions); err != nil {
+		return t, err
 	}
-	var bounces sql.NullInt64
-	var dur sql.NullFloat64
-	if err := d.db.QueryRow(`SELECT SUM(n = 1), AVG(dur) FROM
-		(SELECT COUNT(*) AS n, (MAX(ts) - MIN(ts)) / 1000.0 AS dur FROM hits WHERE `+w+` GROUP BY sid)`, args...).
+	var bounces, dur sql.NullInt64
+	if err := d.db.QueryRow(`SELECT SUM(n = 1), SUM(dur) FROM
+		(SELECT COUNT(*) AS n, MAX(ts) - MIN(ts) AS dur FROM hits WHERE `+w+` GROUP BY sid)`, args...).
 		Scan(&bounces, &dur); err != nil {
-		return out, err
+		return t, err
 	}
-	out.Bounces, out.Duration = int(bounces.Int64), dur.Float64
-	return out, nil
+	t.Bounces, t.durMS = int(bounces.Int64), dur.Int64
+	return t, nil
 }
 
 // HourRow is one hour's page views and visitors (distinct within the
@@ -315,7 +410,10 @@ const topMax = 500
 // campaigns count sessions (by their first page); entry and exit pages
 // count sessions too; crawlers and the pages they crawl count hits;
 // every other dimension counts visitors.
-func (d *DB) Top(f Filter, dim string) ([]Row, error) {
+func (d *DB) Top(f Filter, dim string) ([]Row, error) { return d.rank(f, dim, topMax) }
+
+// rank is Top cut at limit rows; -1 is every row.
+func (d *DB) rank(f Filter, dim string, limit int) ([]Row, error) {
 	if (dim == "crawler" || dim == "botpath") && f.Bot == "" {
 		f.Bot = "all" // the crawlers' lists are always over crawlers
 	}
@@ -341,7 +439,7 @@ func (d *DB) Top(f Filter, dim string) ([]Row, error) {
 	default:
 		return nil, fmt.Errorf("stats: no dimension %q", dim)
 	}
-	rows, err := d.db.Query(q+` ORDER BY 2 DESC, 1 LIMIT ?`, append(args, topMax)...)
+	rows, err := d.db.Query(q+` ORDER BY 2 DESC, 1 LIMIT ?`, append(args, limit)...)
 	if err != nil {
 		return nil, err
 	}
@@ -383,11 +481,25 @@ func (d *DB) Recent(n int) ([]LiveHit, error) {
 }
 
 // StatsSweep drops the hits before a time (the retention) and reports
-// how many went.
+// how many went. The kept days that held any of them go too, so a
+// report over them reads what is left.
 func (d *DB) Sweep(before time.Time) (int64, error) {
-	res, err := d.db.Exec(`DELETE FROM hits WHERE ts < ?`, before.UnixMilli())
+	defer d.dropping()()
+	tx, err := d.db.Begin()
 	if err != nil {
 		return 0, err
 	}
-	return res.RowsAffected()
+	defer tx.Rollback()
+	res, err := tx.Exec(`DELETE FROM hits WHERE ts < ?`, before.UnixMilli())
+	if err != nil {
+		return 0, err
+	}
+	if err := dropDays(tx, "<", before.UnixMilli()); err != nil {
+		return 0, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return n, tx.Commit()
 }

@@ -32,15 +32,46 @@ a request that was a person opening a page — a `fetch()`, a prefetch, a
 apart from every human number, under its name.
 
 The host owns the database. This package opens no file and registers no
-driver: it is handed a `*sql.DB`, keeps two tables in it (`hits` and
-`hits_salt`) and leaves the rest alone, so a server can keep its readers
-beside its own records.
+driver: it is handed a `*sql.DB`, keeps its tables in it (`hits` and
+`hits_salt`, and the days it has counted in `hits_views`, `hits_days`
+and `hits_meta`) and leaves the rest alone, so a server can keep its
+readers beside its own records.
 
 The SQL is SQLite's. Hand it a pool the way the snippet does — WAL, a
 busy timeout, and one connection — or a busy moment answers
 `SQLITE_BUSY` and that second's hits are dropped rather than a request
 delayed. A `:memory:` database needs the single connection even more:
 with a pool, another connection is another empty database.
+
+A report over many days does not read their hits. A visitor's id is
+the day's and a session is the visitor's, so nobody is in two days, and
+every number of a span — visitors, page views, sessions, bounces,
+session time, each ranked list — is the sum of its days'. A day that
+has ended (five minutes ago, for a hit still on its way) is counted once,
+in one pass over its hits, and kept in `hits_days`: its summary, its
+hours, every key of every list. A report then sums the kept days and
+reads only today, and the ragged end of a span that does not begin at a
+midnight, from the hits. `Run` counts the days of the view without
+filters ahead of the desk, and again a few minutes after each midnight;
+a filtered view's days are counted the first time a report asks, kept
+while it is read (32 views at most, a week unread at most). The numbers
+are the same as the hits' own to the last one, page lists and JSON alike.
+
+`Options.Reader` is a second pool on the same file, read-only, for the
+reports to read through. With one a report runs as many of its queries
+at once as the pool has connections, and counts that many days at once:
+
+```go
+rd, _ := sql.Open("sqlite", "app.db?_pragma=busy_timeout(5000)&_pragma=query_only(1)")
+rd.SetMaxOpenConns(runtime.NumCPU())
+st, err := stats.New(db, stats.Options{Location: time.Local, Reader: rd})
+```
+
+Over five million hits in a month on one site, with a connection a core
+on 20 cores, a month's desk is read in 0.2 s (every list, as the JSON
+has them, 0.3 s) where it took 113 s from the hits; the month is counted
+in 5 s when it was never counted before, and a filtered month's first
+reading takes about a second.
 
 ## What the desk shows
 
@@ -65,6 +96,8 @@ view is fetched in place.
 | `LiveHeader` | the header a page's own refetch carries, so it is not counted again (default `X-Hub-Live`) |
 | `AnyClientKinds` | kinds of page counted whatever the client is, for a page tools read as much as browsers (the hub's agent guide) |
 | `HomeURL`, `HomeLabel` | where the desk's close box leads (default `/`, "Home") |
+| `Path`, `JSONPath` | where the desk and its JSON are served, so a host can keep one desk per site (default `/stats`, `/v1/stats`) |
+| `Reader` | a read-only pool on the same database for the reports, whose queries then run as many at once as it has connections (default: the database itself, one at a time) |
 
 `Stop` ends the writer, having written the hits it still held: call it
 before closing the database.
@@ -99,7 +132,9 @@ Country, region and city come from the proxy's headers when there is one
 "Not known". An hour is counted where its middle falls, so in a zone offset by half
 an hour the chart's first bucket may take an hour that began just before
 it; the totals are exact either way. `Sweep` drops hits older than a time — a retention policy is
-the host's to run, and there is none by default.
+the host's to run, and there is none by default. A kept day holds no
+visitor id, only the keys of the lists and their counts, and a sweep
+drops the kept days it took hits from too.
 
 ## The server
 

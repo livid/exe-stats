@@ -10,9 +10,10 @@
 // user agent is ever stored.
 //
 // The host owns the database. This package opens no file and registers
-// no driver — it is handed a *sql.DB, keeps two tables in it (hits and
-// hits_salt) and leaves the rest alone, so a server can keep its readers
-// beside its own records:
+// no driver — it is handed a *sql.DB, keeps its tables in it (hits and
+// hits_salt, and the finished days it has counted in hits_views,
+// hits_days and hits_meta) and leaves the rest alone, so a
+// server can keep its readers beside its own records:
 //
 //	st, err := stats.New(db, stats.Options{Location: time.Local})
 //	go st.Run()
@@ -30,13 +31,16 @@ package stats
 import (
 	_ "embed"
 
+	"context"
 	"database/sql"
 	"errors"
 	"html/template"
 	"log"
 	"net/http"
+	"runtime"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -93,16 +97,33 @@ type Options struct {
 	// one desk per site mounts each at a path of its own. Defaults
 	// "/stats" and "/v1/stats".
 	Path, JSONPath string
+	// Reader is a second pool on the same database for the reports to
+	// read through, read-only (the database in WAL): a report runs as
+	// many of its queries at once as the pool has connections (one a
+	// core when it sets no limit), and the writer's connection stays
+	// free. Default: the database itself, one query at a time.
+	Reader *sql.DB
 }
 
 // Stats is the counting and the report: one per database.
 type Stats struct {
-	db   *DB
-	coll *Collector
-	opt  Options
+	db    *DB
+	rd    *DB // what reports read through: Options.Reader, else db
+	width int // how many of a report's queries run at once: rd's connections
+	coll  *Collector
+	opt   Options
 
 	mu    sync.Mutex
 	cache map[string]cacheEntry
+
+	seal    time.Duration      // how long after its end a day is kept (sealDelay)
+	since   int64              // ms: the days before are read from their hits (countedBy)
+	views   [16]chan struct{}  // lockView's, each holding one
+	ctx     context.Context    // the keeper's and the reports': done once Stop is called
+	cancel  context.CancelFunc //
+	kept    chan struct{}      // closed when the keeper has returned
+	keeping atomic.Bool        // whether Run started the keeper
+	tidied  atomic.Int64       // ms: when the views were last trimmed (tidy)
 
 	tmpl *template.Template // the standalone page
 }
@@ -146,6 +167,10 @@ func New(db *sql.DB, o Options) (*Stats, error) {
 		return nil, err
 	}
 	c.Log = o.Log
+	since, err := d.countedBy(o.Location, time.Now())
+	if err != nil {
+		return nil, err
+	}
 	t, err := template.New("stats").Funcs(Funcs()).Parse(pageHTML)
 	if err != nil {
 		return nil, err
@@ -153,12 +178,30 @@ func New(db *sql.DB, o Options) (*Stats, error) {
 	if _, err := t.Parse(documentHTML); err != nil {
 		return nil, err
 	}
-	return &Stats{db: d, coll: c, opt: o, tmpl: t}, nil
+	rd, width := d, 1
+	if o.Reader != nil {
+		rd, width = &DB{db: o.Reader}, o.Reader.Stats().MaxOpenConnections
+		if width <= 0 {
+			width = runtime.NumCPU()
+		}
+	}
+	s := &Stats{db: d, rd: rd, width: width, coll: c, opt: o, tmpl: t, seal: sealDelay, since: since,
+		kept: make(chan struct{})}
+	s.ctx, s.cancel = context.WithCancel(context.Background())
+	for i := range s.views {
+		s.views[i] = make(chan struct{}, 1)
+	}
+	return s, nil
 }
 
-// Run writes the queued hits; it does not return. Start it in a
-// goroutine once, after New.
-func (s *Stats) Run() { s.coll.Run() }
+// Run writes the queued hits, and keeps the finished days counted; it
+// does not return. Start it in a goroutine once, after New.
+func (s *Stats) Run() {
+	if s.keeping.CompareAndSwap(false, true) {
+		go s.keeper()
+	}
+	s.coll.Run()
+}
 
 // Flush writes what is queued now and lets the next report see it —
 // what Run does once a second. It is for a host that is not running Run
@@ -189,9 +232,16 @@ func (s *Stats) Wanted(r *http.Request, kind string) bool {
 	return wanted(r, kind, s.opt.LiveHeader, s.opt.AnyClientKinds)
 }
 
-// Stop ends Run, having written the hits it still held. A host closing
-// its database calls this first; after it, nothing more is recorded.
-func (s *Stats) Stop() { s.coll.Stop() }
+// Stop ends Run, having written the hits it still held, and the keeper,
+// having waited for it. A host closing its database calls this first;
+// after it, nothing more is recorded, and a report says it was stopped.
+func (s *Stats) Stop() {
+	s.cancel()
+	s.coll.Stop()
+	if s.keeping.Load() {
+		<-s.kept // cancelled, it returns at once: nothing of it outlives Stop
+	}
+}
 
 // DB is the hits tables, for a host that wants to query or sweep them.
 func (s *Stats) DB() *DB { return s.db }

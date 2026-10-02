@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -117,6 +118,34 @@ type Span struct {
 	IncompleteLast bool // the last bucket holds now: still filling
 }
 
+// midnight is where a date begins in loc, where the salt turns and with
+// it the visitors: its first instant. That is 00:00, or where a clock
+// change skips 00:00 the moment it jumps (Santiago's spring goes from
+// 23:59 to 01:00), and where one goes back over 00:00 the first of the
+// two (Havana's autumn: 00:59, then 00:00 again). d may run past the
+// month's end, as time.Date takes it.
+func midnight(y int, mo time.Month, d int, loc *time.Location) time.Time {
+	t := time.Date(y, mo, d, 0, 0, 0, 0, loc)
+	n := time.Date(y, mo, d, 12, 0, 0, 0, loc) // the date, normalised
+	on := func(u time.Time) bool {
+		u = u.In(loc)
+		return u.Year() == n.Year() && u.YearDay() == n.YearDay()
+	}
+	if !on(t) {
+		if _, end := t.ZoneBounds(); !end.IsZero() {
+			return end
+		}
+		return t
+	}
+	if start, _ := t.ZoneBounds(); !start.IsZero() && t.Sub(start) < 3*time.Hour {
+		if c := start.Add(-time.Nanosecond); on(c) {
+			_, off := c.Zone()
+			return time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, time.FixedZone("", off)).In(loc)
+		}
+	}
+	return t
+}
+
 // spanOf resolves a range key at a moment in the collector's zone.
 // today and yesterday are calendar days there (today up to now, drawn
 // on the whole day's axis), 24h the clock's last day, 7d and 30d that
@@ -125,8 +154,16 @@ type Span struct {
 // ending where this one starts — today's is the same hours of yesterday.
 func spanOf(key string, now time.Time, loc *time.Location) Span {
 	now = now.In(loc)
-	day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
-	month := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, loc)
+	day := midnight(now.Year(), now.Month(), now.Day(), loc)
+	month := midnight(now.Year(), now.Month(), 1, loc)
+	days := func(t time.Time, n int) time.Time { // the midnight n days on
+		t = t.In(loc)
+		return midnight(t.Year(), t.Month(), t.Day()+n, loc)
+	}
+	months := func(t time.Time, n int) time.Time { // the first of the month n months on
+		t = t.In(loc)
+		return midnight(t.Year(), t.Month()+time.Month(n), 1, loc)
+	}
 	sp := Span{Key: key}
 	for _, r := range ranges {
 		if r.key == key {
@@ -137,29 +174,29 @@ func spanOf(key string, now time.Time, loc *time.Location) Span {
 	switch key {
 	case "today":
 		sp.From, sp.To, sp.Step = day, end, "hour"
-		sp.PrevFrom, sp.PrevTo = day.AddDate(0, 0, -1), end.AddDate(0, 0, -1)
+		sp.PrevFrom, sp.PrevTo = days(day, -1), end.AddDate(0, 0, -1)
 	case "yesterday":
-		sp.From, sp.To, sp.Step = day.AddDate(0, 0, -1), day, "hour"
-		sp.PrevFrom, sp.PrevTo = day.AddDate(0, 0, -2), day.AddDate(0, 0, -1)
+		sp.From, sp.To, sp.Step = days(day, -1), day, "hour"
+		sp.PrevFrom, sp.PrevTo = days(day, -2), days(day, -1)
 	case "24h":
 		sp.From, sp.To, sp.Step = now.Add(-24*time.Hour), end, "hour"
 		sp.PrevFrom, sp.PrevTo = sp.From.Add(-24*time.Hour), sp.From
 	case "30d":
-		sp.From, sp.To, sp.Step = day.AddDate(0, 0, -29), end, "day"
-		sp.PrevFrom, sp.PrevTo = sp.From.AddDate(0, 0, -30), sp.From
+		sp.From, sp.To, sp.Step = days(day, -29), end, "day"
+		sp.PrevFrom, sp.PrevTo = days(sp.From, -30), sp.From
 	case "3m":
-		sp.From, sp.To, sp.Step = month.AddDate(0, -2, 0), end, "day"
-		sp.PrevFrom, sp.PrevTo = sp.From.AddDate(0, -3, 0), sp.From
+		sp.From, sp.To, sp.Step = months(month, -2), end, "day"
+		sp.PrevFrom, sp.PrevTo = months(sp.From, -3), sp.From
 	case "6m":
-		sp.From, sp.To, sp.Step = month.AddDate(0, -5, 0), end, "month"
-		sp.PrevFrom, sp.PrevTo = sp.From.AddDate(0, -6, 0), sp.From
+		sp.From, sp.To, sp.Step = months(month, -5), end, "month"
+		sp.PrevFrom, sp.PrevTo = months(sp.From, -6), sp.From
 	case "12m":
-		sp.From, sp.To, sp.Step = month.AddDate(0, -11, 0), end, "month"
-		sp.PrevFrom, sp.PrevTo = sp.From.AddDate(0, -12, 0), sp.From
+		sp.From, sp.To, sp.Step = months(month, -11), end, "month"
+		sp.PrevFrom, sp.PrevTo = months(sp.From, -12), sp.From
 	default: // 7d
 		sp.Key, sp.Label, sp.Compare = "7d", "7 days", "the 7 days before"
-		sp.From, sp.To, sp.Step = day.AddDate(0, 0, -6), end, "day"
-		sp.PrevFrom, sp.PrevTo = sp.From.AddDate(0, 0, -7), sp.From
+		sp.From, sp.To, sp.Step = days(day, -6), end, "day"
+		sp.PrevFrom, sp.PrevTo = days(sp.From, -7), sp.From
 	}
 	// the buckets: whole hours, days or months from the span's start up
 	// to its end — today and 24h draw the whole day's axis, so the
@@ -167,7 +204,7 @@ func spanOf(key string, now time.Time, loc *time.Location) Span {
 	axisEnd := sp.To
 	switch key {
 	case "today":
-		axisEnd = day.AddDate(0, 0, 1)
+		axisEnd = days(day, 1)
 	case "24h":
 		axisEnd = sp.From.Add(24 * time.Hour)
 	}
@@ -176,9 +213,9 @@ func spanOf(key string, now time.Time, loc *time.Location) Span {
 	case "hour":
 		b = time.Date(sp.From.Year(), sp.From.Month(), sp.From.Day(), sp.From.Hour(), 0, 0, 0, loc)
 	case "day":
-		b = time.Date(sp.From.Year(), sp.From.Month(), sp.From.Day(), 0, 0, 0, 0, loc)
+		b = days(sp.From, 0)
 	default:
-		b = time.Date(sp.From.Year(), sp.From.Month(), 1, 0, 0, 0, 0, loc)
+		b = months(sp.From, 0)
 	}
 	for b.Before(axisEnd) {
 		sp.Buckets = append(sp.Buckets, b)
@@ -186,9 +223,9 @@ func spanOf(key string, now time.Time, loc *time.Location) Span {
 		case "hour":
 			b = b.Add(time.Hour)
 		case "day":
-			b = b.AddDate(0, 0, 1)
+			b = days(b, 1)
 		default:
-			b = b.AddDate(0, 1, 0)
+			b = months(b, 1)
 		}
 	}
 	sp.IncompleteLast = key != "yesterday" // every other span reaches now: its last bucket is still filling
@@ -332,52 +369,44 @@ func (s *Stats) build(sp Span, f Filter, lists []string, now time.Time) (*Report
 	loc := sp.From.Location()
 	r := &Report{Range: sp.Key, From: sp.From.Format(time.RFC3339), To: sp.To.Format(time.RFC3339),
 		Zone: loc.String(), Step: sp.Step, Lists: map[string][]Row{}, span: sp, filter: f}
-	f.From, f.To = sp.From.UnixMilli(), sp.To.UnixMilli()
-	var err error
-	if r.Summary, err = s.db.Summary(f); err != nil {
-		return nil, err
-	}
-	pf := f
-	pf.From, pf.To = sp.PrevFrom.UnixMilli(), sp.PrevTo.UnixMilli()
-	if r.Previous, err = s.db.Summary(pf); err != nil {
-		return nil, err
-	}
-	r.Filters = map[string]string{}
-	for _, d := range filters {
-		if v := value(f, d.param); v != "" {
-			r.Filters[d.param] = v
-		}
-	}
-	if r.Series, err = s.series(sp, f, now); err != nil {
-		return nil, err
-	}
 	if lists == nil {
 		for name := range listDims {
 			lists = append(lists, name)
 		}
 		sort.Strings(lists)
 	}
+	w := want{hours: true, firsts: sp.Step != "hour"}
 	for _, name := range lists {
-		l, ok := listDims[name]
-		if !ok {
-			continue
+		if l, ok := listDims[name]; ok && !slices.Contains(w.dims, l.dim) {
+			w.dims = append(w.dims, l.dim)
 		}
-		rows, err := s.db.Top(f, l.dim)
-		if err != nil {
-			return nil, err
-		}
-		if rows == nil {
-			rows = []Row{}
-		}
-		r.Lists[name] = rows
 	}
-	online, err := s.db.Online(now.Add(-OnlineWindow).UnixMilli())
-	if err != nil {
+	var cur, prev counts
+	var online int
+	var recent []LiveHit
+	if err := s.par(
+		func() (err error) { cur, err = s.over(f, sp.From, sp.To, now, w); return err },
+		func() (err error) { prev, err = s.over(f, sp.PrevFrom, sp.PrevTo, now, want{}); return err },
+		func() (err error) { online, err = s.rd.Online(now.Add(-OnlineWindow).UnixMilli()); return err },
+		func() (err error) { recent, err = s.rd.Recent(recentN); return err },
+	); err != nil {
 		return nil, err
 	}
-	recent, err := s.db.Recent(recentN)
-	if err != nil {
-		return nil, err
+	if now.UnixMilli()-s.tidied.Load() > 24*3600*1000 {
+		s.tidy(now) // a day since: without Run, nothing else does
+	}
+	r.Summary, r.Previous = cur.summary(), prev.summary()
+	r.Filters = map[string]string{}
+	for _, d := range filters {
+		if v := value(f, d.param); v != "" {
+			r.Filters[d.param] = v
+		}
+	}
+	r.Series = series(sp, cur, now)
+	for _, name := range lists {
+		if l, ok := listDims[name]; ok {
+			r.Lists[name] = ranked(cur.lists[l.dim])
+		}
 	}
 	r.Live = Live{Online: online, Recent: []LiveRow{}}
 	for _, h := range recent {
@@ -390,14 +419,10 @@ func (s *Stats) build(sp Span, f Filter, lists []string, now time.Time) (*Report
 }
 
 // series buckets the span's hours (page views, and visitors within
-// the hour) and its visitors' first hits (one per visitor-day) into the
+// the hour) and where its visitors begin (one per visitor-day) into the
 // span's buckets: an hour bucket takes its hour's visitors, a day or
 // month bucket counts the visitors whose day falls in it.
-func (s *Stats) series(sp Span, f Filter, now time.Time) ([]Point, error) {
-	hours, err := s.db.Hours(f)
-	if err != nil {
-		return nil, err
-	}
+func series(sp Span, c counts, now time.Time) []Point {
 	pts := make([]Point, len(sp.Buckets))
 	for i, b := range sp.Buckets {
 		pts[i].start = b
@@ -409,7 +434,7 @@ func (s *Stats) series(sp Span, f Filter, now time.Time) ([]Point, error) {
 		i := sort.Search(len(sp.Buckets), func(i int) bool { return sp.Buckets[i].After(t) }) - 1
 		return i
 	}
-	for _, h := range hours {
+	for _, h := range c.hours {
 		// the hours come out of the store in UTC; where a zone is offset
 		// by half an hour a bucket begins inside one, so place an hour by
 		// its middle, and let an hour straddling the span's start count
@@ -427,13 +452,9 @@ func (s *Stats) series(sp Span, f Filter, now time.Time) ([]Point, error) {
 		}
 	}
 	if sp.Step != "hour" {
-		firsts, err := s.db.VisitorFirst(f)
-		if err != nil {
-			return nil, err
-		}
-		for _, t := range firsts {
-			if i := at(time.UnixMilli(t)); i >= 0 {
-				pts[i].Visitors++
+		for _, v := range c.firsts {
+			if i := at(time.UnixMilli(v.at)); i >= 0 {
+				pts[i].Visitors += v.n
 			}
 		}
 	}
@@ -463,7 +484,7 @@ func (s *Stats) series(sp Span, f Filter, now time.Time) ([]Point, error) {
 			}
 		}
 	}
-	return pts, nil
+	return pts
 }
 
 func ago(d time.Duration) string {
