@@ -288,7 +288,7 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     ok(await page.evaluate(() => window.__lit), 'the lamp lit for a word that brought views');
     await page.waitForFunction(() => !document.querySelector('.site .dot'), null, { timeout: 5000 }).catch(() => {});
     const fell = await page.evaluate(() => [window.__dots, document.querySelectorAll('.site .dot').length]);
-    ok(fell[0] >= 1 && fell[0] <= 3 && fell[1] === 0, 'the views fell into the hour as dots, a dot a view, and every one has landed', fell);
+    ok(fell[0] >= 2 && fell[0] <= 3 && fell[1] === 0, 'the three views fell into the hour as dots, by the log of each word\'s count, and every one has landed', fell);
 
     // ---- the Sites window draws the day: a bar an hour, the views in the hour still filling ----
     await page.reload();

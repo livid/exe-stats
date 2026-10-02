@@ -155,7 +155,8 @@ const pix = (() => {
 // word for a minute is dropped and another opened. A row's views are on
 // the hero's wheels, and its lamp lights for each word that brings more;
 // those readers arrive as the hero's do: orange dots fall into the hour
-// under way, a dot a view and three at most a word, and as each lands
+// under way, as many as the views' count has digits, and one more (a
+// view is one dot, 2-9 two, 10-99 three, six at most), and as each lands
 // the bar steps up and the wheels roll on to it. A new hour, a day drawn
 // anew, or a reader who asks for less motion is drawn as it is.
 (() => {
@@ -297,7 +298,9 @@ const pix = (() => {
       }
       // the views since the last word, as dots on their way: the bar and
       // the wheels keep what they show until each lands; the lamp lights now
-      const th = s.bars[now].h, n = Math.min(add, 3), t = performance.now();
+      // dots on a log scale: 1 view, one dot; then one more for each digit of
+      // the count (digits, not log10, which lands under 3 for 1000 in places)
+      const th = s.bars[now].h, n = add > 0 ? Math.min(6, add === 1 ? 1 : String(add).length + 1) : 0, t = performance.now();
       for (let k = 1; k <= n; k++) {
         air.push({ row, box, v: L.gv + Math.round(add * k / n), h: snap(L.gh + (th - L.gh) * k / n),
           t0: t + (k - 1) * 1500 / n + Math.random() * 300, dur: 1000 + Math.random() * 400 });
