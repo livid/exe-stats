@@ -936,11 +936,51 @@ dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
         {{range .Accounts}}<tr><td><a href="/?as={{.Addr}}" title="{{.Addr}}"><code>{{.Short}}</code></a></td><td>{{.Tier}}</td><td>{{.Sites}}</td><td>{{.Views}}</td></tr>
         {{end}}
       </table>
-      <p class="fine">An admin reads an account's page as its owner sees it, and its sites' desks; nothing read here changes anything.</p>
+      <p class="fine">An admin reads an account's page as its owner sees it, and its sites' desks; nothing read here changes anything. What every wallet holds is <a href="/backstage/">backstage</a>.</p>
     </div>
     <div class="statusbar"><span>{{len .Accounts}} accounts</span><span>Views counted this month</span></div>
   </div>
 </div>{{end}}
+
+{{/* Backstage, /backstage/, an admin's alone: every wallet that has
+     signed in, what it holds as last read and how many sites it has,
+     the largest holding first, each a link to its page read as its
+     owner sees it (backstage.go). An address shows whole where the
+     window holds it, and its ends on a phone, as the mint does. */}}
+{{define "backstage"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Backstage · {{.Host}}</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#dddddd">
+{{template "icons"}}
+<style>{{chrome}}{{template "style"}}
+#backstage th, #backstage td { padding: 1px 4px; }
+#backstage td code { line-height: 16px; }
+.addr.short { display: none; }
+@media (max-width: 539px) { .addr { display: none; } .addr.short { display: inline; } }
+</style>
+</head>
+<body>
+<div class="window" id="backstage">
+  <div class="titlebar"><a class="tbox" href="/" title="Stats" aria-label="Stats"></a><span class="stripe"></span><span class="title">Backstage</span><span class="stripe"></span></div>
+  <div class="frame">
+    <div class="body">
+      <table>
+        <tr><th>Wallet</th><th>Holding</th><th>Sites</th></tr>
+        {{range .Rows}}<tr><td><a href="/?as={{.Addr}}" title="{{.Addr}}"><code><span class="addr">{{.Addr}}</span><span class="addr short">{{.Short}}</span></code></a></td><td>{{.Holding}}</td><td>{{.Sites}}</td></tr>
+        {{else}}<tr><td colspan="3">No wallet has signed in yet.</td></tr>
+        {{end}}
+      </table>
+      <p class="fine">Every wallet that has signed in, the largest holding first. A holding is the one last read: at sign-in, once a day, and by Check Now. A wallet opens its page as its owner sees it; nothing read here changes anything.</p>
+    </div>
+    <div class="statusbar"><span>{{.Wallets}}</span><span>{{.Held}}</span></div>
+  </div>
+</div>
+</body>
+</html>{{end}}
 
 {{define "tiers"}}<div class="window" id="tiers">
   <div class="titlebar"><span class="stripe"></span><span class="title">Tiers</span><span class="stripe"></span></div>

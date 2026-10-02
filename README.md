@@ -240,6 +240,12 @@ has a site, the month's busiest first, and `/?as=<address>` is that
 account's page as its owner sees it — its numbers live, its sites' desks
 and icons a press away — with every control that would change something
 left off. Whatever changes something still answers to the owner alone.
+`/backstage/` lists every wallet that has signed in — its whole address,
+what it holds of `mint` as last read (at sign-in, once a day, and by
+Check Now; "Not read yet" when the RPC never answered) and how many
+sites it has — the largest holding first, with the wallets, the sites
+and the holdings summed on its status line; the Accounts window links
+there. To anyone who is not an admin, signed in or not, it is not found.
 
 **Tiers** follow what the wallet holds of `mint`, read over RPC
 (`getTokenAccountsByOwner`): how many sites count, and how many page

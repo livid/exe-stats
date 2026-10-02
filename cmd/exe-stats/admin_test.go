@@ -109,3 +109,64 @@ func TestAdmins(t *testing.T) {
 		t.Fatalf("a config naming an admin: %v", err)
 	}
 }
+
+// TestBackstage: /backstage/ lists every wallet that has signed in, what
+// it holds and how many sites it has, the largest holding first — for an
+// admin; to anyone else it is not there.
+func TestBackstage(t *testing.T) {
+	h := newHarness(t)
+	owner, admin, unread := newWallet(), newWallet(), newWallet()
+	h.bal.set(owner.addr, 1234567)
+	h.signIn(owner)
+	h.signIn(admin)
+	h.bal.down = true // a wallet whose holding the RPC never answered
+	h.signIn(unread)
+	h.bal.down = false
+	h.form(owner, "/v1/sites", url.Values{"domain": {"shop.example"}})
+	h.form(owner, "/v1/sites", url.Values{"domain": {"blog.example"}})
+	h.app.admins[admin.addr] = true
+
+	rec := h.do(admin, "GET", "/backstage/", "", nil)
+	page := rec.Body.String()
+	if rec.Code != 200 || rec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("backstage for an admin: %d %q", rec.Code, rec.Header().Get("Cache-Control"))
+	}
+	row := func(w *wallet) string {
+		i := strings.Index(page, `<tr><td><a href="/?as=`+w.addr+`"`)
+		if i < 0 {
+			t.Fatalf("backstage lists no row for %s", w.addr[:4])
+		}
+		return page[i : i+strings.Index(page[i:], "</tr>")]
+	}
+	for _, c := range []struct {
+		w             *wallet
+		holding, site string
+	}{{owner, "<td>1,234,567</td>", "<td>2</td>"}, {admin, "<td>0</td>", "<td>0</td>"}, {unread, "<td>Not read yet</td>", "<td>0</td>"}} {
+		if r := row(c.w); !strings.Contains(r, "<span class=\"addr\">"+c.w.addr+"</span>") || !strings.Contains(r, c.holding) || !strings.HasSuffix(r, c.site) {
+			t.Errorf("the row for %s: %s", c.w.addr[:4], r)
+		}
+	}
+	if !(strings.Index(page, owner.addr) < strings.Index(page, admin.addr) && strings.Index(page, admin.addr) < strings.Index(page, unread.addr)) {
+		t.Error("backstage is not the largest holding first, the unread last")
+	}
+	if !strings.Contains(page, "3 wallets, 2 sites") || !strings.Contains(page, "1,234,567 $V2EX held") {
+		t.Error("backstage's status line does not count the wallets, sites and holdings")
+	}
+	if strings.Contains(page, `action="/v1/`) {
+		t.Error("backstage carries a control that changes something")
+	}
+	// the admin's own page leads there
+	if !strings.Contains(h.do(admin, "GET", "/", "", nil).Body.String(), `href="/backstage/"`) {
+		t.Error("the admin's Accounts window has no way backstage")
+	}
+
+	// to anyone else it is not there
+	for _, w := range []*wallet{owner, nil} {
+		if rec := h.do(w, "GET", "/backstage/", "", nil); rec.Code != 404 || strings.Contains(rec.Body.String(), admin.addr) {
+			t.Errorf("backstage for a wallet that is no admin: %d", rec.Code)
+		}
+	}
+	if rec := h.do(admin, "GET", "/backstage", "", nil); rec.Code != 301 || rec.Header().Get("Location") != "/backstage/" {
+		t.Errorf("/backstage: %d %q", rec.Code, rec.Header().Get("Location"))
+	}
+}

@@ -206,6 +206,8 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /badge/{$}", a.handleBadgePage)
 	mux.HandleFunc("GET /badge/{file}", a.handleSiteBadge)
 	mux.Handle("GET /badge", http.RedirectHandler("/badge/", http.StatusMovedPermanently))
+	mux.HandleFunc("GET /backstage/{$}", a.handleBackstage)
+	mux.Handle("GET /backstage", http.RedirectHandler("/backstage/", http.StatusMovedPermanently))
 	mux.HandleFunc("/e", a.handleCollect)
 	mux.HandleFunc("GET /v1/challenge", a.handleChallenge)
 	mux.HandleFunc("POST /v1/signin", a.handleSignIn)
