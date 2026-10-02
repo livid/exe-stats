@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -192,15 +193,20 @@ func badgeRows(on int) []styleRow {
 
 // badgeLinks are the HTML and the Markdown that put a site's badge on a
 // page, linking here: to the site's desk while it is public, else home.
+// The link is tagged — the site, a badge, its style — so a click on it
+// is a campaign of its own where it lands.
 func (a *App) badgeLinks(r *http.Request, s Site) (src, html, md, alt string) {
 	o := a.originOf(r)
 	href := o + "/"
 	if s.Public {
 		href = o + "/sites/" + s.ID
 	}
+	style := badgeStyles[min(max(s.Badge, 0), len(badgeStyles)-1)]
+	tags := []string{"utm_source=" + url.QueryEscape(s.Domain), "utm_medium=badge",
+		"utm_campaign=" + url.QueryEscape(strings.ToLower(strings.ReplaceAll(style, " ", "-")))}
 	src = o + "/badge/" + s.ID + ".gif"
 	alt = s.Domain + " page views, counted by exe-stats"
-	html = `<a href="` + href + `"><img src="` + src + `" width="88" height="31" alt="` + alt + `" style="image-rendering: pixelated;"></a>`
-	md = `[![` + alt + `](` + src + `)](` + href + `)`
+	html = `<a href="` + href + "?" + strings.Join(tags, "&amp;") + `"><img src="` + src + `" width="88" height="31" alt="` + alt + `" style="image-rendering: pixelated;"></a>`
+	md = `[![` + alt + `](` + src + `)](` + href + "?" + strings.Join(tags, "&") + `)`
 	return
 }

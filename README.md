@@ -303,7 +303,10 @@ Cloudflare Cache Rule ("exe-stats site badges") bypasses the edge for
 Browser Cache TTL stretches any badge's max-age to four hours. While the style is None it is not found,
 and that answer is not kept. The settings show it at its own size and
 enlarged, with the HTML and the Markdown that put it on a page, linking
-to the server's home page, or to the site's desk while it is public.
+to the server's home page, or to the site's desk while it is public. The
+link is tagged `utm_source=` the site's domain, `utm_medium=badge` and
+`utm_campaign=hit-counter` (the style's name), so the clicks it brings
+show as a campaign of their own.
 
 **Checking it.** `go test ./...` covers the rules, the sign-in and the
 collect address. `cmd/exe-stats/e2e/e2e.js` drives the whole flow in

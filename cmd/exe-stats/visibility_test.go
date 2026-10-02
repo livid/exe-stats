@@ -27,8 +27,8 @@ func TestVisibility(t *testing.T) {
 	alt := "shop.example page views, counted by exe-stats"
 	badgeLinks := func(href string) []string {
 		return []string{
-			`id="badge-html" readonly value="&lt;a href=&#34;` + href + `&#34;&gt;&lt;img src=&#34;` + src + `&#34; width=&#34;88&#34; height=&#34;31&#34; alt=&#34;` + alt + `&#34; style=&#34;image-rendering: pixelated;&#34;&gt;&lt;/a&gt;"`,
-			`id="badge-md" readonly value="[![` + alt + `](` + src + `)](` + href + `)"`,
+			`id="badge-html" readonly value="&lt;a href=&#34;` + href + `?utm_source=shop.example&amp;amp;utm_medium=badge&amp;amp;utm_campaign=hit-counter&#34;&gt;&lt;img src=&#34;` + src + `&#34; width=&#34;88&#34; height=&#34;31&#34; alt=&#34;` + alt + `&#34; style=&#34;image-rendering: pixelated;&#34;&gt;&lt;/a&gt;"`,
+			`id="badge-md" readonly value="[![` + alt + `](` + src + `)](` + href + `?utm_source=shop.example&amp;utm_medium=badge&amp;utm_campaign=hit-counter)"`,
 		}
 	}
 
@@ -93,7 +93,7 @@ func TestVisibility(t *testing.T) {
 		t.Fatalf("the choice is not written down: %+v", sites)
 	}
 	for _, who := range []*wallet{nil, stranger, w} {
-		for _, p := range []string{desk + "?range=24h", json + "?range=24h"} {
+		for _, p := range []string{desk + "?range=24h", json + "?range=24h", desk + "?utm_source=shop.example&utm_medium=badge&utm_campaign=hit-counter"} {
 			if rec := h.do(who, "GET", p, "", nil); rec.Code != 200 || !strings.Contains(rec.Body.String(), "shop.example") && !strings.HasPrefix(p, "/v1/") {
 				t.Errorf("a public desk read at %s = %d", p, rec.Code)
 			}

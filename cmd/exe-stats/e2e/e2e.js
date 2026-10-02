@@ -428,7 +428,7 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     ok(new URL(bp.url()).hash === '#badge' && await bp.locator('#badge-said').innerText() === 'The badge is on: any page may show it.', 'choosing Hit Counter puts it on, and says so', bp.url());
     ok(await bp.locator('#hosts-said').innerText() === '', 'and says it only there');
     await bp.waitForFunction(() => [...document.querySelectorAll('.badges img')].every(i => i.complete && i.naturalWidth === 88));
-    ok(await bp.locator('#badge-html').inputValue() === `<a href="${APP}/"><img src="${gifURL}" width="88" height="31" alt="shop.example page views, counted by exe-stats" style="image-rendering: pixelated;"></a>`, "the HTML shows the site's own badge", await bp.locator('#badge-html').inputValue());
+    ok(await bp.locator('#badge-html').inputValue() === `<a href="${APP}/?utm_source=shop.example&amp;utm_medium=badge&amp;utm_campaign=hit-counter"><img src="${gifURL}" width="88" height="31" alt="shop.example page views, counted by exe-stats" style="image-rendering: pixelated;"></a>`, "the HTML shows the site's own badge", await bp.locator('#badge-html').inputValue());
     const res = await bp.request.get(gifURL);
     ok(res.status() === 200 && res.headers()['content-type'] === 'image/gif' && res.headers()['cache-control'] === 'no-cache', 'and it is there for any page, asked again every time', res.headers());
     await bp.click('.copy[data-for="badge-html"]');
@@ -461,8 +461,8 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     ok(new URL(vp.url()).hash === '#visibility' && await vp.locator('#visibility-said').innerText() === 'The desk is public: anyone with its address can read it.', 'choosing Public opens the desk, and says so', vp.url());
     ok(await vp.locator('#badge-said').innerText() === '', 'and says it only there');
     ok(await vp.locator('#desk-link').inputValue() === deskURL, "the settings hand out the desk's address", await vp.locator('#desk-link').inputValue());
-    ok(await vp.locator('#badge-html').inputValue() === `<a href="${deskURL}"><img src="${gifURL}" width="88" height="31" alt="shop.example page views, counted by exe-stats" style="image-rendering: pixelated;"></a>` &&
-      (await vp.locator('#badge-md').inputValue()).endsWith(`](${deskURL})`), "and the badge's HTML and Markdown link to the public desk", [await vp.locator('#badge-html').inputValue(), await vp.locator('#badge-md').inputValue()]);
+    ok(await vp.locator('#badge-html').inputValue() === `<a href="${deskURL}?utm_source=shop.example&amp;utm_medium=badge&amp;utm_campaign=hit-counter"><img src="${gifURL}" width="88" height="31" alt="shop.example page views, counted by exe-stats" style="image-rendering: pixelated;"></a>` &&
+      (await vp.locator('#badge-md').inputValue()).endsWith(`](${deskURL}?utm_source=shop.example&utm_medium=badge&utm_campaign=hit-counter)`), "and the badge's HTML and Markdown link to the public desk", [await vp.locator('#badge-html').inputValue(), await vp.locator('#badge-md').inputValue()]);
     await vp.click('#copy-desk');
     await vp.waitForFunction(() => document.getElementById('visibility-said').textContent.startsWith('The address'), null, { timeout: 3000 }).catch(() => {});
     const vcopied = await vp.locator('#visibility-said').innerText();
@@ -564,7 +564,7 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     await page.goto(`${APP}/sites/${siteId}/settings`);
     await Promise.all([page.waitForNavigation(), page.selectOption('#visibility-choice', 'private')]);
     ok(await page.locator('#visibility-said').innerText() === 'The desk is private: only you can read it.' && await page.locator('#desk-link').count() === 0, 'choosing Private closes the desk, and says so');
-    ok((await page.locator('#badge-html').inputValue()).startsWith(`<a href="${APP}/">`), "and the badge links home again", await page.locator('#badge-html').inputValue());
+    ok((await page.locator('#badge-html').inputValue()).startsWith(`<a href="${APP}/?utm_source=`), "and the badge links home again", await page.locator('#badge-html').inputValue());
     await anon.page.goto(deskURL);
     ok(anon.page.url() === `${APP}/`, 'the private desk sends a signed-out reader home again', anon.page.url());
     await anon.ctx.close();
