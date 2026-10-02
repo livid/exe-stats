@@ -131,11 +131,12 @@ logged or shown.
 The script sends one beacon a page view — the page's address and where
 the reader came from — and again when a page changes its own address
 (`pushState`); a hash change is not a view. It sets no cookie and stores
-nothing. The collect address, `POST /e`, counts a beacon only for the
-site's own domain (or its `www.`), sent from that origin, and answers
-the same 202 whatever became of it; the `X-Exe-Stats` response header
-says what did (`counted`, `not this site's page`, `month full`, …), for
-an owner checking a snippet in the browser's network panel.
+nothing. The collect address, `POST /e`, counts a beacon only for a page
+on one of the site's hosts — its domain, and any more its settings list
+— sent from that page's own origin, and answers the same 202 whatever
+became of it; the `X-Exe-Stats` response header says what did
+(`counted`, `not this site's page`, `month full`, …), for an owner
+checking a snippet in the browser's network panel.
 
 **A site's settings** (`/sites/{id}/settings`, its Settings… button)
 begin with the setup check: a check mark that turns green once the
@@ -146,7 +147,14 @@ beacon sent from another origin), and the page asks
 `/v1/sites/{id}/setup` again every few seconds, so a page of the site
 opened in another tab turns it green. When the snippet last reported is
 kept in `app.db`, to the minute; a refusal only in memory. A site that
-counted before the check is read once from its own hits.
+counted before the check is read once from its own hits. Under it the
+site's **hosts**: besides its domain, the names whose pages count too —
+`blog.example.com`, `example.github.io`, or `*.example.com` for that
+name and every name under it, twenty at most; each also counts its
+`www.` name, as the domain does. A view from another of the site's hosts
+is listed on the desk by host and path (`blog.example.com/post`), so its
+front page is not the domain's, and a link from one of the site's hosts
+to another is no source.
 
 **Signing in** offers each detected wallet by name and icon when more
 than one is installed, as the hub does. It is one signature over a message

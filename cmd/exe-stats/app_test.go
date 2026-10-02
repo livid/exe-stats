@@ -6,10 +6,12 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -358,7 +360,7 @@ func TestSetupCheck(t *testing.T) {
 	}
 	// a page on another host carrying this site's snippet
 	h.beacon(shop, "https://staging.example/tea", "", "https://staging.example")
-	if v := check(); v.OK || v.Line != "A view came from staging.example just now and was not counted: this site is shop.example." {
+	if v := check(); v.OK || v.Line != "A view came from staging.example just now and was not counted: it is not one of the hosts below." {
 		t.Fatalf("a foreign view: %+v", v)
 	}
 	h.beacon(shop, "https://shop.example/", "", "https://evil.example")
@@ -405,6 +407,157 @@ func TestSetupCheck(t *testing.T) {
 	h.app.mu.Unlock()
 	if v := check(); !v.OK {
 		t.Fatalf("from the hits: %+v", v)
+	}
+}
+
+// Hosts: a site counts the pages of the hosts its owner lists besides
+// its domain, a name or every name under one; another host's pages are
+// listed by host on the desk, and a step between the site's own hosts
+// is no source.
+func TestHosts(t *testing.T) {
+	h := newHarness(t)
+	w := newWallet()
+	h.bal.set(w.addr, 10000)
+	h.signIn(w)
+	h.form(w, "/v1/sites", url.Values{"domain": {"shop.example"}})
+	shop := h.siteID(w, "shop.example")
+	settings := "/sites/" + shop + "/settings"
+	add := func(host string) string { return h.form(w, "/v1/sites/"+shop+"/hosts", url.Values{"host": {host}}) }
+	at := func(key, word string) string { return settings + "?" + key + "=" + word + "#hosts" }
+
+	if got := h.beacon(shop, "https://blog.shop.example/post", "", "https://blog.shop.example"); got != beaconForeign {
+		t.Fatalf("an unlisted host: %q", got)
+	}
+	setup := func() setupView {
+		var v setupView
+		json.Unmarshal(h.do(w, "GET", "/v1/sites/"+shop+"/setup", "", nil).Body.Bytes(), &v)
+		return v
+	}
+	if v := setup(); !strings.HasPrefix(v.Line, "A view came from blog.shop.example") {
+		t.Fatalf("the refusal: %+v", v)
+	}
+	for _, c := range []struct{ in, want string }{
+		{"https://www.Blog.Shop.Example/post?x=1", at("m", "hostadded")}, // read like the domain is: blog.shop.example
+		{"blog.shop.example", at("e", "counts")},
+		{"shop.example", at("e", "counts")},
+		{"www.shop.example", at("e", "counts")},
+		{"not a host", at("e", "host")},
+		{"*.", at("e", "host")},
+		{"*.docs.example", at("m", "hostadded")},
+		{"api.docs.example", at("e", "counts")}, // under *.docs.example
+		{"*.v2.docs.example", at("e", "counts")},
+		{"mirror.example.net", at("m", "hostadded")},
+	} {
+		if got := add(c.in); got != c.want {
+			t.Errorf("add %q: %s, want %s", c.in, got, c.want)
+		}
+	}
+	if v := setup(); !strings.HasPrefix(v.Line, "Waiting for the first page view.") {
+		t.Fatalf("the refusal outlived its host's listing: %+v", v)
+	}
+	page := h.do(w, "GET", settings+"?m=hostadded", "", nil).Body.String()
+	for _, want := range []string{`value="blog.shop.example"`, `value="*.docs.example"`, "Every subdomain", `value="mirror.example.net"`, "The host counts now."} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the settings page lacks %s", want)
+		}
+	}
+
+	for i, c := range []struct{ name, page, origin, ref, want string }{
+		{"a listed host", "https://blog.shop.example/post", "https://blog.shop.example", "https://shop.example/", beaconCounted},
+		{"its www name", "https://www.blog.shop.example/", "https://www.blog.shop.example", "", beaconCounted},
+		{"a name under a *. host", "https://api.v2.docs.example/ref", "https://api.v2.docs.example", "https://news.ycombinator.com/", beaconCounted},
+		{"the *. host's own name", "https://docs.example/", "https://docs.example", "", beaconCounted},
+		{"the domain", "https://shop.example/tea", "https://shop.example", "https://mirror.example.net/", beaconCounted},
+		{"a listed page sent from another listed host", "https://blog.shop.example/", "https://shop.example", "", beaconOrigin},
+		{"a host not listed", "https://shop.example.evil/", "https://shop.example.evil", "", beaconForeign},
+		{"a name ending like a host", "https://evildocs.example/", "https://evildocs.example", "", beaconForeign},
+	} {
+		// each a reader of its own, so each view starts a visit with its source
+		body, _ := json.Marshal(map[string]string{"s": shop, "u": c.page, "r": c.ref})
+		hdr := map[string]string{"Origin": c.origin, "CF-Connecting-IP": fmt.Sprintf("198.51.100.%d", i+1)}
+		if got := h.do(nil, "POST", "/e", string(body), hdr).Header().Get("X-Exe-Stats"); got != c.want {
+			t.Errorf("%s: %q, want %q", c.name, got, c.want)
+		}
+	}
+
+	// the desk: another host's pages by host and path, and the steps
+	// between the site's hosts no source
+	time.Sleep(1200 * time.Millisecond) // the site's writer lands its batch once a second
+	h.app.mu.Lock()
+	h.app.sites[shop].st.ResetCache()
+	h.app.mu.Unlock()
+	var rep struct {
+		Lists map[string][]struct {
+			Key string
+			N   int
+		}
+	}
+	rec := h.do(w, "GET", "/v1/sites/"+shop+"/stats?range=24h", "", nil)
+	if err := json.Unmarshal(rec.Body.Bytes(), &rep); err != nil {
+		t.Fatalf("report = %s", rec.Body)
+	}
+	keys := func(list string) []string {
+		var out []string
+		for _, r := range rep.Lists[list] {
+			out = append(out, r.Key)
+		}
+		return out
+	}
+	for _, want := range []string{"blog.shop.example/post", "blog.shop.example/", "api.v2.docs.example/ref", "docs.example/", "/tea"} {
+		if !slices.Contains(keys("pages"), want) {
+			t.Errorf("pages %v lack %s", keys("pages"), want)
+		}
+	}
+	if src := keys("sources"); slices.Contains(src, "shop.example") || slices.Contains(src, "mirror.example.net") || !slices.Contains(src, "Hacker News") {
+		t.Errorf("sources = %v", src)
+	}
+
+	// removing one: it stops counting, and the others stay
+	if got := h.form(w, "/v1/sites/"+shop+"/hosts/remove", url.Values{"host": {"blog.shop.example"}}); got != at("m", "hostremoved") {
+		t.Fatalf("remove: %s", got)
+	}
+	if got := h.form(w, "/v1/sites/"+shop+"/hosts/remove", url.Values{"host": {"blog.shop.example"}}); got != at("e", "nohost") {
+		t.Fatalf("remove again: %s", got)
+	}
+	if got := h.beacon(shop, "https://blog.shop.example/post", "", "https://blog.shop.example"); got != beaconForeign {
+		t.Fatalf("a removed host: %q", got)
+	}
+
+	// another wallet cannot touch them
+	poor := newWallet()
+	h.bal.set(poor.addr, 10000)
+	h.signIn(poor)
+	if got := h.form(poor, "/v1/sites/"+shop+"/hosts", url.Values{"host": {"evil.example"}}); got != "/?e=gone" {
+		t.Fatalf("a stranger's add: %s", got)
+	}
+
+	// a site lists at most maxHosts
+	for i := len(h.app.sites[shop].site.Hosts); i < maxHosts; i++ {
+		add(fmt.Sprintf("h%d.example", i))
+	}
+	if got := add("one-more.example"); got != at("e", "hostmax") {
+		t.Fatalf("past the most: %s", got)
+	}
+
+	// written down: a new process reads them back
+	app2, err := newApp(h.app.cfg, h.app.store.db, h.bal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := app2.sites[shop].site.Hosts; len(got) != maxHosts || got[0] != "*.docs.example" || got[1] != "mirror.example.net" {
+		t.Fatalf("read back: %v", got)
+	}
+}
+
+func TestHostEntry(t *testing.T) {
+	for in, want := range map[string]string{
+		"blog.example.com": "blog.example.com", "WWW.Example.com": "example.com", "https://a.example.com:8080/x": "a.example.com",
+		"*.example.com": "*.example.com", "*.www.example.com": "*.example.com", "*": "", "*.com": "", "a.*.example.com": "", "example": "",
+	} {
+		got, ok := hostEntry(in)
+		if (want == "") == ok || (ok && got != want) {
+			t.Errorf("hostEntry(%q) = %q %v, want %q", in, got, ok, want)
+		}
 	}
 }
 

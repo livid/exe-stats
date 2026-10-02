@@ -167,11 +167,13 @@
 </body>
 </html>{{end}}
 
-{{/* A site's settings: for now the setup check, a check mark that turns
-     green once the snippet reports a view from the site's own pages.
-     While it waits the page asks again every few seconds, and only the
-     mark and its line change: the line has the room of its longest
-     wording. */}}
+{{/* A site's settings. Setup: a check mark that turns green once the
+     snippet reports a view from the site's own pages; while it waits the
+     page asks again every few seconds, and only the mark and its line
+     change: the line has the room of its longest wording. Hosts: the
+     hosts whose pages count besides the domain, a list box with Remove
+     under it and a field to add one; each press is a form answered with
+     the page again. */}}
 {{define "settings"}}<!doctype html>
 <html lang="en">
 <head>
@@ -192,6 +194,19 @@ h2 { margin: 0 0 8px; font-size: 12px; line-height: 16px; }
 @media (min-resolution: 1.01dppx) and (max-resolution: 1.99dppx) { .tick { shape-rendering: geometricPrecision; } }
 .setup p { flex: 1; min-width: 0; min-height: 32px; margin: 0; overflow-wrap: anywhere; }
 @media (max-width: 479px) { .setup p { min-height: 48px; } }
+section + section { margin-top: 12px; padding-top: 12px; border-top: 1px solid #bbb; }
+/* the hosts: a list box of 18px rows, sunken white as the tiers are; a
+   row is chosen by a radio button kept out of sight, and wears the
+   selection's colours */
+.list { background: #fff; border: 1px solid #262626; box-shadow: -1px -1px 0 #999, 1px 1px 0 #fff; }
+.list:focus-within { outline: 2px solid #9999fe; outline-offset: 0; }
+.list .row { position: relative; display: flex; align-items: center; gap: 12px; height: 18px; padding: 1px 6px; line-height: 16px; }
+.list .row input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; -webkit-appearance: none; appearance: none; cursor: default; }
+.list .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list .note { flex: none; margin-left: auto; color: #555; }
+.list .row:has(input:checked) { background: #333399; color: #fff; }
+.list .row:has(input:checked) .note { color: #fff; }
+@media (pointer: coarse) { .list .row { height: 24px; } }
 </style>
 </head>
 <body>
@@ -199,6 +214,7 @@ h2 { margin: 0 0 8px; font-size: 12px; line-height: 16px; }
   <div class="titlebar"><a class="tbox" href="/" title="Sites" aria-label="Sites"></a><span class="stripe"></span><span class="title">{{.Domain}} Settings</span><span class="stripe"></span></div>
   <div class="frame">
     <div class="body">
+      <section id="setup-section">
       <h2>Setup</h2>
       <div class="setup{{if .Setup.OK}} ok{{end}}" id="setup" data-src="/v1/sites/{{.ID}}/setup">
         <svg class="tick" width="16" height="16" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true"><path class="shadow" fill="#000" fill-opacity=".4" d="M14 3h1v1H14zM14 4h1v1H14zM13 5h1v1H13zM12 6h1v1H12zM11 7h1v1H11zM10 8h1v1H10zM9 9h1v1H9zM8 10h1v1H8zM7 11h1v1H7zM6 12h1v1H6zM5 13h2v1H5z"/><path class="shadow" fill="#000" fill-opacity=".18" d="M15 3h1v1H15zM15 4h1v1H15zM14 5h1v1H14zM13 6h1v1H13zM12 7h1v1H12zM11 8h1v1H11zM10 9h1v1H10zM9 10h1v1H9zM8 11h1v1H8zM7 12h1v1H7zM7 13h1v1H7z"/><path class="mark" fill="#ccc" d="M12 3h2v1H12zM11 4h3v1H11zM10 5h3v1H10zM9 6h3v1H9zM0 7h2v1H0zM8 7h3v1H8zM0 8h3v1H0zM7 8h3v1H7zM1 9h3v1H1zM6 9h3v1H6zM2 10h6v1H2zM3 11h4v1H3zM4 12h2v1H4z"/></svg>
@@ -210,6 +226,24 @@ h2 { margin: 0 0 8px; font-size: 12px; line-height: 16px; }
         <button class="btn" id="copy" type="button">Copy Snippet</button>
         <a class="btn" href="/sites/{{.ID}}">Open Desk</a>
       </div>
+      </section>
+      <section id="hosts">
+      <h2>Hosts</h2>
+      <p>A page counts when it is on one of these hosts or its www. name. Add *.{{.Domain}} to count every subdomain.</p>
+      <form method="post" action="/v1/sites/{{.ID}}/hosts/remove">
+        <div class="list" role="radiogroup" aria-label="The hosts that count">
+          <div class="row"><span class="name">{{.Domain}}</span><span class="note">The site's own</span></div>
+          {{range .Hosts}}<label class="row"><input type="radio" name="host" value="{{.Name}}"><span class="name">{{.Name}}</span><span class="note">{{.Note}}</span></label>
+          {{end}}
+        </div>
+        <div class="buttons"><button class="btn" id="remove-host" disabled>Remove</button></div>
+      </form>
+      <form class="add" method="post" action="/v1/sites/{{.ID}}/hosts">
+        <input class="field" name="host" placeholder="blog.{{.Domain}}" aria-label="A host to count" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="255">
+        <button class="btn">Add Host</button>
+      </form>
+      <p class="flash{{if .Fault}} fault{{end}}" id="hosts-said" role="status">{{if .Fault}}{{.Fault}}{{else}}{{.Said}}{{end}}</p>
+      </section>
     </div>
     <div class="statusbar"><span>{{if .Counting}}Counting{{else}}Resting{{end}}</span><span>Days begin in {{.TZ}}</span></div>
   </div>
@@ -222,6 +256,10 @@ h2 { margin: 0 0 8px; font-size: 12px; line-height: 16px; }
     f.select();
     if (navigator.clipboard) navigator.clipboard.writeText(f.value).catch(() => {});
   });
+  // Remove takes the chosen host, so it waits for one
+  const rm = document.getElementById("remove-host"), picks = document.querySelectorAll('.list input[name="host"]');
+  rm.disabled = !document.querySelector('.list input:checked');
+  for (const i of picks) i.addEventListener("change", () => { rm.disabled = false; });
   // until the snippet reports, ask again: a page opened on the site in
   // another tab turns the check green here
   const box = document.getElementById("setup"), line = document.getElementById("setup-line");

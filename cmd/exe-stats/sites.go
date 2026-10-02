@@ -220,19 +220,21 @@ func (a *App) collect(r *http.Request) string {
 	if e == nil {
 		return beaconUnknown
 	}
-	// the page must be the site's own, and a browser's beacon comes
-	// from that page: a hit for somebody else's site id is refused here
-	if hostOf(page.Host) != e.site.Domain {
-		e.refused = refusal{At: now.UnixMilli(), Why: beaconForeign, From: hostOf(page.Host)}
+	// the page must be on one of the site's hosts, and a browser's
+	// beacon comes from that page: a hit for somebody else's site id is
+	// refused here
+	host := hostOf(page.Host)
+	if !e.site.counts(host) {
+		e.refused = refusal{At: now.UnixMilli(), Why: beaconForeign, From: host}
 		return beaconForeign
 	}
 	if o := r.Header.Get("Origin"); o != "" {
-		if ou, err := url.Parse(o); err != nil || hostOf(ou.Host) != e.site.Domain {
+		if ou, err := url.Parse(o); err != nil || hostOf(ou.Host) != host {
 			from := ""
 			if err == nil {
 				from = hostOf(ou.Host)
 			}
-			e.refused = refusal{At: now.UnixMilli(), Why: beaconOrigin, From: from}
+			e.refused = refusal{At: now.UnixMilli(), Why: beaconOrigin, From: from, Page: host}
 			return beaconOrigin
 		}
 	}
@@ -252,11 +254,11 @@ func (a *App) collect(r *http.Request) string {
 		a.log("collect: %v", err)
 		return beaconInternal
 	}
-	path := page.Path
-	if path == "" {
-		path = "/"
+	ref := in.R
+	if e.site.ownRef(ref) {
+		ref = ""
 	}
-	view := stats.PageView{Host: e.site.Domain, Path: path, Query: page.Query(), Referrer: in.R}
+	view := stats.PageView{Host: e.site.Domain, Path: e.site.pathOf(host, page.Path), Query: page.Query(), Referrer: ref}
 	// a crawler that runs scripts is kept apart, as the desk keeps it,
 	// and is not a view of the month
 	if _, _, _, bot := stats.Classify(r.UserAgent()); bot {

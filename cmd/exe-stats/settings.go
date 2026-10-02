@@ -19,6 +19,7 @@ type refusal struct {
 	At   int64  // ms; 0: none since the server started
 	Why  string // beaconForeign or beaconOrigin
 	From string // the host the view came from; "" when the origin was unreadable
+	Page string // for another origin: the host of the page the view claimed
 }
 
 // setupView is the setup check in a line: OK once the snippet has
@@ -51,16 +52,19 @@ func (a *App) seenOf(e *siteEntry) int64 {
 // was refused in the last day. The caller holds a.mu.
 func (a *App) setupOf(e *siteEntry, now time.Time) (setupView, string) {
 	seen, rf := a.seenOf(e), e.refused
+	if rf.Why == beaconForeign && e.site.counts(rf.From) {
+		rf = refusal{} // its host has been listed since: no reason any more
+	}
 	why := ""
 	if rf.At != 0 {
 		when := ago(now.Sub(time.UnixMilli(rf.At)))
 		switch {
 		case rf.Why == beaconForeign:
-			why = fmt.Sprintf("A view came from %s %s and was not counted: this site is %s.", rf.From, when, e.site.Domain)
+			why = fmt.Sprintf("A view came from %s %s and was not counted: it is not one of the hosts below.", rf.From, when)
 		case rf.From != "":
-			why = fmt.Sprintf("A view of %s was sent from %s %s, and was not counted.", e.site.Domain, rf.From, when)
+			why = fmt.Sprintf("A view of %s was sent from %s %s, and was not counted.", rf.Page, rf.From, when)
 		default:
-			why = fmt.Sprintf("A view of %s was sent from another origin %s, and was not counted.", e.site.Domain, when)
+			why = fmt.Sprintf("A view of %s was sent from another origin %s, and was not counted.", rf.Page, when)
 		}
 	}
 	if seen == 0 {
@@ -108,7 +112,9 @@ type settingsData struct {
 	Host, ID, Domain, Snippet, TZ string
 	Counting                      bool
 	Setup                         setupView
-	Note                          string
+	Note                          string    // a view refused while the snippet works
+	Hosts                         []hostRow // besides the domain
+	Said, Fault                   string    // what the last press did
 }
 
 // GET /sites/{id}/settings — a site's settings, for its owner alone.
@@ -136,7 +142,10 @@ func (a *App) handleSettings(w http.ResponseWriter, r *http.Request) {
 	d := settingsData{Host: a.host(r), ID: e.site.ID, Domain: e.site.Domain, Snippet: a.snippet(r, e.site.ID),
 		TZ: e.site.TZ, Counting: a.counting(ac, e.site.ID)}
 	d.Setup, d.Note = a.setupOf(e, now)
+	d.Hosts = hostRows(e.site)
 	a.mu.Unlock()
+	q := r.URL.Query()
+	d.Said, d.Fault = notes[q.Get("m")], faults[q.Get("e")]
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	if err := a.tmpl.ExecuteTemplate(w, "settings", d); err != nil {

@@ -34,6 +34,9 @@ var notes = map[string]string{
 	"removed": "The site and its numbers are removed.",
 	"picked":  "That site counts now.",
 	"checked": "The holding was read again.",
+	// a site's settings
+	"hostadded":   "The host counts now.",
+	"hostremoved": "That host no longer counts.",
 }
 
 var faults = map[string]string{
@@ -47,6 +50,11 @@ var faults = map[string]string{
 	"gone":    "That site is not here.",
 	"failed":  "That did not work. Nothing has changed.",
 	"foreign": "Press the button on this site's own page.",
+	// a site's settings
+	"host":    "That does not read as a host: type it like blog.example.com, or *.example.com.",
+	"counts":  "That host counts already.",
+	"hostmax": "A site lists at most 20 hosts.",
+	"nohost":  "Choose a host in the list first.",
 }
 
 type tierRow struct {

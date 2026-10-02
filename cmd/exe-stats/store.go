@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS sites (
   picked  INTEGER NOT NULL DEFAULT 0,      -- ms; the owner chose it to count when the tier holds fewer
   created INTEGER NOT NULL,
   seen    INTEGER NOT NULL DEFAULT 0,      -- ms; the last view from the site's own pages: the snippet is in place
+  hosts   TEXT NOT NULL DEFAULT '',        -- more hosts whose pages count, space-separated: blog.example.com, *.example.com
   UNIQUE (addr, domain)
 );
 CREATE INDEX IF NOT EXISTS sites_addr ON sites(addr);
@@ -57,9 +58,11 @@ CREATE TABLE IF NOT EXISTS usage (
 	if err != nil {
 		return nil, err
 	}
-	// a file made before the setup check gains its column
-	if _, err := db.Exec(`ALTER TABLE sites ADD COLUMN seen INTEGER NOT NULL DEFAULT 0`); err != nil && !strings.Contains(err.Error(), "duplicate column") {
-		return nil, err
+	// a file made before the setup check, or before hosts, gains its column
+	for _, col := range []string{`seen INTEGER NOT NULL DEFAULT 0`, `hosts TEXT NOT NULL DEFAULT ''`} {
+		if _, err := db.Exec(`ALTER TABLE sites ADD COLUMN ` + col); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			return nil, err
+		}
 	}
 	return &Store{db}, nil
 }
@@ -144,9 +147,10 @@ func (s *Store) sweepSessions(now time.Time) {
 type Site struct {
 	ID, Addr, Domain, TZ  string
 	Picked, Created, Seen int64
+	Hosts                 []string // more hosts that count besides Domain (hosts.go)
 }
 
-const siteCols = `id, addr, domain, tz, picked, created, seen`
+const siteCols = `id, addr, domain, tz, picked, created, seen, hosts`
 
 var errSiteExists = errors.New("that site is already here")
 
@@ -169,9 +173,11 @@ func scanSites(rows *sql.Rows, err error) ([]Site, error) {
 	var out []Site
 	for rows.Next() {
 		var st Site
-		if err := rows.Scan(&st.ID, &st.Addr, &st.Domain, &st.TZ, &st.Picked, &st.Created, &st.Seen); err != nil {
+		var hosts string
+		if err := rows.Scan(&st.ID, &st.Addr, &st.Domain, &st.TZ, &st.Picked, &st.Created, &st.Seen, &hosts); err != nil {
 			return nil, err
 		}
+		st.Hosts = strings.Fields(hosts)
 		out = append(out, st)
 	}
 	return out, rows.Err()
@@ -197,6 +203,12 @@ func (s *Store) pickSite(addr, id string, now time.Time) error {
 // saveSeen writes down when a site's snippet last reported a view.
 func (s *Store) saveSeen(id string, ms int64) error {
 	_, err := s.db.Exec(`UPDATE sites SET seen=? WHERE id=?`, ms, id)
+	return err
+}
+
+// setHosts writes down the hosts that count for a site besides its domain.
+func (s *Store) setHosts(id string, hosts []string) error {
+	_, err := s.db.Exec(`UPDATE sites SET hosts=? WHERE id=?`, strings.Join(hosts, " "), id)
 	return err
 }
 

@@ -9,7 +9,8 @@
 // E2E_DIR is the scratch server's data directory: it must not exist yet,
 // so a run can never land on a real one. Ports: 17797 the server (7795 is
 // the live one's: a port that already answers is refused), 17795 the
-// RPC, 17796 the site (shop.example is mapped to it in the browser).
+// RPC, 17796 the site (shop.example and the names under it are mapped to
+// it in the browser).
 const { chromium } = require('playwright');
 const http = require('http'), crypto = require('crypto'), fs = require('fs'), path = require('path');
 const { spawn } = require('child_process');
@@ -108,7 +109,7 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     for (let i = 0; ; i++) {
       try { await fetch(APP + '/robots.txt'); break; } catch (e) { if (i > 50) throw new Error('the server did not start'); await new Promise(r => setTimeout(r, 100)); }
     }
-    browser = await chromium.launch({ args: ['--host-resolver-rules=MAP shop.example 127.0.0.1:17796'] });
+    browser = await chromium.launch({ args: ['--host-resolver-rules=MAP shop.example 127.0.0.1:17796,MAP *.shop.example 127.0.0.1:17796'] });
 
     // ---- signed out, at every scale and on a phone ----
     for (const v of [{ dpr: 1 }, { dpr: 1.5 }, { dpr: 2 }, { dpr: 3, phone: true, viewport: { width: 390, height: 844 } }]) {
@@ -223,6 +224,43 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
     const json = await page.evaluate(async id => (await fetch(`/v1/sites/${id}/stats`)).json(), siteId);
     ok(json.summary && json.summary.pageviews === 3 && json.summary.visitors === 1, 'the JSON says the same', json.summary);
 
+    // ---- hosts: a blog on a subdomain counts once it is listed ----
+    const hp = await rich.ctx.newPage();
+    hp.errors = [];
+    hp.on('pageerror', e => hp.errors.push(String(e)));
+    const blog = await context(browser, []), said = [];
+    blog.page.on('response', r => { if (r.url() === APP + '/e') said.push(r.headers()['x-exe-stats'] || ''); });
+    await blog.page.goto('http://blog.shop.example/post');
+    await blog.page.waitForTimeout(300);
+    ok(said[0] === "not this site's page", 'a subdomain not listed is not counted', said);
+    await hp.goto(`${APP}/sites/${siteId}/settings`);
+    const why = await hp.locator('.notice').innerText().catch(() => '');
+    ok(why.startsWith('A view came from blog.shop.example') && why.endsWith('it is not one of the hosts below.'), 'the settings say why', why);
+    ok(await hp.locator('#remove-host').isDisabled(), 'Remove waits for a host to be chosen');
+    const addHost = async h => {
+      await hp.fill('#hosts .add .field', h);
+      await Promise.all([hp.waitForNavigation(), hp.click('#hosts .add .btn')]);
+      return hp.locator('#hosts-said').innerText();
+    };
+    ok(await addHost('blog.shop.example') === 'The host counts now.' && new URL(hp.url()).hash === '#hosts', 'Add Host lists it and comes back to the hosts', hp.url());
+    ok(await hp.locator('.list .row').count() === 2, 'the list has the domain and the host');
+    ok(await hp.locator('.notice').count() === 0, 'and the note about its refused view is gone');
+    ok(await addHost('www.shop.example') === 'That host counts already.' && await hp.locator('#hosts-said.fault').count() === 1, 'a host that counts already is refused, and says so');
+    await blog.page.goto('http://blog.shop.example/post');
+    await blog.page.waitForTimeout(300);
+    ok(said[said.length - 1] === 'counted', 'the listed subdomain counts', said);
+    await hp.click('.list label.row:has-text("blog.shop.example")');
+    ok(await hp.locator('#remove-host').isEnabled(), 'choosing a host lets Remove take it');
+    const chosen = await hp.locator('.list label.row').evaluate(x => getComputedStyle(x).backgroundColor);
+    ok(chosen === 'rgb(51, 51, 153)', 'the chosen row wears the selection colour', chosen);
+    await shot(hp, 'hosts-chosen-dpr1');
+    await Promise.all([hp.waitForNavigation(), hp.click('#remove-host')]);
+    ok(await hp.locator('#hosts-said').innerText() === 'That host no longer counts.' && await hp.locator('.list .row').count() === 1, 'Remove takes it off the list');
+    ok(await addHost('*.shop.example') === 'The host counts now.' && (await hp.locator('.list label.row .note').innerText()) === 'Every subdomain', 'a *. host counts every subdomain');
+    ok(hp.errors.length === 0 && blog.page.errors.length === 0, 'no script errors with hosts', [hp.errors, blog.page.errors]);
+    await blog.ctx.close();
+    await hp.close();
+
     // ---- the account at every scale and on a phone ----
     const cookies = await rich.ctx.cookies();
     ok(cookies.length === 1 && cookies[0].httpOnly && cookies[0].sameSite === 'Lax', 'the session is one HttpOnly, SameSite=Lax cookie');
@@ -240,7 +278,9 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
       await c.page.goto(`${APP}/sites/${siteId}/settings`);
       ok(await c.page.locator('#setup.ok').count() === 1 && await noScroll(c.page), `${tag}: the settings show the green check and do not scroll sideways`);
       const heights = await c.page.locator('#settings .btn:not(.tbox)').evaluateAll(bs => bs.map(x => Math.round(x.getBoundingClientRect().height)));
-      ok(heights.length === 2 && heights.every(h => h === 20), `${tag}: settings buttons are 20px high`, heights);
+      ok(heights.length === 4 && heights.every(h => h === 20), `${tag}: settings buttons are 20px high`, heights);
+      const rows = await c.page.locator('.list .row').evaluateAll(rs => rs.map(x => Math.round(x.getBoundingClientRect().height)));
+      ok(rows.length === 2 && rows.every(h => h === (v.phone ? 24 : 18)), `${tag}: the hosts list has its rows at their height`, rows);
       // the line keeps the room of its longest wording, so the check's turn
       // moves nothing — measured in DejaVu Sans, Verdana's width, which is
       // where an iPhone and Windows land in the font stack
@@ -252,7 +292,7 @@ const noScroll = page => page.evaluate(() => document.documentElement.scrollWidt
         p.textContent = keep; p.style.minHeight = p.style.fontFamily = '';
         return { min, hs };
       }, ['Waiting for the first page view. Paste the snippet into the site\'s head, then open a page.',
-        'A view came from staging.shop.example 59 min ago and was not counted: this site is shop.example.',
+        'A view came from staging.shop.example 59 min ago and was not counted: it is not one of the hosts below.',
         'A view of shop.example was sent from translate.goog 59 min ago, and was not counted.']);
       ok(room.hs.every(h => h <= room.min), `${tag}: the line's room holds its wordings`, room);
       await shot(c.page, 'settings-' + tag);

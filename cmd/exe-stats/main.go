@@ -188,6 +188,8 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /v1/sites/{id}/stats", a.handleDesk)
 	mux.HandleFunc("GET /sites/{id}/settings", a.handleSettings)
 	mux.HandleFunc("GET /v1/sites/{id}/setup", a.handleSetup)
+	mux.HandleFunc("POST /v1/sites/{id}/hosts", a.handleAddHost)
+	mux.HandleFunc("POST /v1/sites/{id}/hosts/remove", a.handleRemoveHost)
 	mux.HandleFunc("GET /robots.txt", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		fmt.Fprint(w, "User-agent: *\nDisallow: /sites/\nDisallow: /v1/\nDisallow: /e\n")
