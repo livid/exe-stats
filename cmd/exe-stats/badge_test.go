@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"html"
+	"image"
 	"image/gif"
 	"net/http"
 	"net/http/httptest"
@@ -104,9 +106,8 @@ func TestCounterFace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := counterFrame{wheels: positions(1997, wheels), blur: make([]bool, wheels),
-		bars: [12]int{4, 3, 2, 3, 6, 9, 11, 12, 11, 5, 0, 0}, cur: 9}
-	c, want := f.draw(nil), g.Image[0]
+	f := counterFrame{wheels: digitsOf(1997, wheels), bars: [12]int{4, 3, 2, 3, 6, 9, 11, 12, 11, 5, 0, 0}, cur: 9}
+	c, want := f.draw(), g.Image[0]
 	bad := 0
 	for y := range ch {
 		for x := range cw {
@@ -124,42 +125,33 @@ func TestCounterFace(t *testing.T) {
 	}
 }
 
-// TestCounterLoop: a day with views plays the day back and comes to rest
-// on the frame it began with; a day with none stands still; a count past
-// five wheels is told in thousands.
+// TestCounterLoop: the numbers stand still and only the lamp moves: the
+// first frame is the badge at rest and held, every later one changes the
+// lamp's box alone. A count past five wheels is told in thousands.
 func TestCounterLoop(t *testing.T) {
 	day := counterDay{Total: 1234, Bars: [12]int64{3, 1, 0, 2, 9, 30, 41, 52, 40, 12}, Now: 9, Top: 60}
 	fs := counterFrames(day)
-	first, end := fs[0], fs[len(fs)-1]
-	if got := first.wheels[wheels-1]; got != 1234 || first.lit || first.cur != 9 || first.bars[7] != 10 || first.bars[9] != 2 {
-		t.Fatalf("the first frame: wheels %v, bars %v", first.wheels, first.bars)
+	if f := fs[0]; f.glow != 0 || f.cs < 200 || fmt.Sprint(f.wheels) != "[0 1 2 3 4]" || f.cur != 9 ||
+		f.bars != [12]int{1, 1, 0, 1, 2, 6, 8, 10, 8, 2} {
+		t.Fatalf("the first frame: %+v", f)
 	}
-	// the last frame sits half a number short of the first, still lit
-	if got := end.wheels[wheels-1]; got != 1233.5 || !end.lit || end.bars != first.bars {
-		t.Errorf("the last frame: wheels %v, bars %v, want 1233.5 and the first's bars", end.wheels, end.bars)
-	}
-	low := 1e9
-	for _, f := range fs {
-		low = min(low, f.wheels[wheels-1])
-	}
-	if low != 1044 {
-		t.Errorf("the day replays from %v, want the count at midnight, 1044", low)
-	}
-
-	if fs := counterFrames(counterDay{Total: 42, Now: 3, Top: 5}); len(fs) != 1 {
-		t.Errorf("a day with no views has %d frames, want 1", len(fs))
-	}
-	big := counterFrames(counterDay{Total: 1234567, Bars: [12]int64{1}, Top: 1})
-	if got := big[0].wheels; len(got) != wheels-1 || got[wheels-2] != 1234 {
-		t.Errorf("1,234,567 stands on the wheels as %v, want 1234 and a K", got)
-	}
-	for name, d := range map[string]counterDay{"a day": day, "a quiet one": {Total: 7, Now: 5}, "a big one": {Total: 1234567, Bars: [12]int64{500, 9000}, Now: 1, Top: 9000}} {
+	lamp := image.Rect(lampX-1, lampY-1, lampX+6, lampY+6)
+	for name, d := range map[string]counterDay{"a day": day, "a quiet one": {Total: 7, Now: 5},
+		"a big one": {Total: 1234567, Bars: [12]int64{500, 9000}, Now: 1, Top: 9000}} {
 		g, err := gif.DecodeAll(bytes.NewReader(drawCounter(d)))
-		if err != nil || g.Config.Width != 88 || g.Config.Height != 31 {
-			t.Fatalf("%s: %v, %d×%d", name, err, g.Config.Width, g.Config.Height)
+		if err != nil || g.Config.Width != 88 || g.Config.Height != 31 || g.LoopCount != 0 {
+			t.Fatalf("%s: %v, %d×%d looping %d", name, err, g.Config.Width, g.Config.Height, g.LoopCount)
 		}
-		if g.Delay[0] < 300 {
-			t.Errorf("%s: the first frame stands %d cs, want it held", name, g.Delay[0])
+		if len(g.Image) < 3 || g.Delay[0] < 200 {
+			t.Errorf("%s: %d frames, the first standing %d cs; want the lamp breathing after a rest", name, len(g.Image), g.Delay[0])
 		}
+		for i, im := range g.Image[1:] {
+			if !im.Bounds().In(lamp) {
+				t.Errorf("%s: frame %d changes %v, outside the lamp", name, i+1, im.Bounds())
+			}
+		}
+	}
+	if f := counterFrames(counterDay{Total: 1234567})[0]; fmt.Sprint(f.wheels) != "[1 2 3 4]" || f.letter == nil {
+		t.Errorf("1,234,567 stands on the wheels as %v, letter %v; want 1234 and a K", f.wheels, f.letter)
 	}
 }

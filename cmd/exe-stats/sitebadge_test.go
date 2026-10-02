@@ -132,7 +132,7 @@ func TestSiteBadge(t *testing.T) {
 		}
 	}
 
-	// a view today, and the badge is a loop over the day
+	// two views today, and the badge stands on them, its lamp breathing
 	h.app.mu.Lock()
 	e := h.app.sites[id]
 	h.app.statsOf(e)

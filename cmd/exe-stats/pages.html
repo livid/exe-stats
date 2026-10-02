@@ -289,7 +289,7 @@ section + section { margin-top: 12px; padding-top: 12px; border-top: 1px solid #
       </section>
       <section id="badge">
       <h2>Badge</h2>
-      <p>An 88×31 button for the site's own pages, with its numbers on it for anyone to read. Hit Counter turns its wheels to every page view since the site was added, beside today's in bars of two hours.</p>
+      <p>An 88×31 button for the site's own pages, with its numbers on it for anyone to read. Hit Counter shows every page view since the site was added on its wheels, beside today's in bars of two hours.</p>
       <form class="style" method="post" action="/v1/sites/{{.ID}}/badge">
         <label for="badge-style">Style:</label>
         <span class="popup"><select id="badge-style" name="style">{{range .Styles}}<option value="{{.Value}}"{{if .On}} selected{{end}}>{{.Name}}</option>{{end}}</select><span class="well"><i><b></b></i></span></span>

@@ -13,15 +13,15 @@ import (
 // the page views since the site was added; its bars, today's, two hours
 // a bar from midnight where the site's days begin.
 //
-// The first frame is the badge as it stands, and it is held, so a reader
-// who stops animations has the whole of it. Then the day replays:
-// midnight slides it off the chart and turns the wheels back to where the
-// day began, and it fills again two hours a beat, the lamp lit while
-// readers arrive, until the wheels slow onto the count the loop began on.
-// A site with no views yet today stands still.
+// The numbers stand still: the wheels and the bars are the site as it
+// is. Only the lamp at the top right moves, breathing — it rests a few
+// seconds, its glow rises through a dim ring to the full one and falls
+// back. The first frame is the lamp at rest, so a reader who stops
+// animations has the whole badge.
 //
-// The face, the glyphs and the palette are badge.py's, in its order; the
-// test draws badge.gif's first frame here and compares the two.
+// The face, the glyphs and the palette are badge.py's, in its order, with
+// one colour more for the dim ring; the test draws badge.gif's first
+// frame here and compares the two.
 
 const cw, ch = 88, 31 // the badge, in px
 
@@ -44,6 +44,7 @@ var counterInk = []struct {
 	{'d', color.RGBA{0x55, 0x55, 0x55, 0xff}}, // between the wheels
 	{'b', color.RGBA{0xbb, 0xbb, 0xbb, 0xff}}, // a number turning away
 	{'m', color.RGBA{0x77, 0x77, 0x77, 0xff}}, // and further
+	{'g', color.RGBA{0xaa, 0x77, 0x99, 0xff}}, // the lamp's glow rising, halfway from the band to its own
 }
 
 var counterPal, counterIndex = func() (color.Palette, [256]uint8) {
@@ -169,54 +170,45 @@ func (c *canvas) art(g []string, x, y int, ink byte) {
 	}
 }
 
-// lamp is the live lamp: lit while a reader arrives, a ring round it.
-func (c *canvas) lamp(lit bool) {
+// lamp is the live lamp, glow 0 at rest; 1 its glint lit and a dim
+// ring round it; 2 the ring in its own colour, as badge.py lights it.
+func (c *canvas) lamp(glow int) {
 	c.art(lampArt, lampX, lampY, 'O')
 	c[lampY+1][lampX+1] = 'o'
-	if lit {
+	if glow > 0 {
+		ring := byte('g')
+		if glow > 1 {
+			ring = 'o'
+		}
 		c[lampY+1][lampX+1] = 'W'
-		c.art(glowArt, lampX-1, lampY-1, 'o')
+		c.art(glowArt, lampX-1, lampY-1, ring)
 	}
 }
 
-// wheel draws wheel n (0 the first, on the left) turned to pos: 7.3 is
-// seven with eight a third of the way up. A wheel spinning is a blur:
-// its numbers dim, and a ghost of the last half turn is left behind them.
-func (c *canvas) wheel(n int, pos float64, blur bool) {
+// wheel draws wheel n (0 the first, on the left) standing on digit d,
+// the rows at its top and foot showing the numbers either side of it
+// turning away round the wheel.
+func (c *canvas) wheel(n, d int) {
 	x0, y0 := caseX+1+n*8, caseY+1
 	c.well(x0, y0)
 	ink := wheelInk[n == wheels-1]
-	on, turning, away := ink[0], ink[1], ink[2]
-	type layer struct {
-		p      float64
-		c0, c1 byte // the face, and the rows turning away
-		c2     byte // the rows at the wheel's top and foot
-	}
-	layers := []layer{{pos, on, turning, away}}
-	if blur {
-		layers = []layer{{pos - 0.5, away, away, away}, {pos, turning, away, away}}
-	}
-	for _, l := range layers {
-		d := math.Floor(l.p)
-		off := int(math.RoundToEven((l.p - d) * pitch))
-		for k := -1; k <= 1; k++ {
-			top := y0 + 2 - off + k*pitch
-			for r, row := range digitArt[((int(d)+k)%10+10)%10] {
-				y := top + r
-				if y < y0 || y > y0+10 {
-					continue
-				}
-				// the wheel's curve: a number dims as it turns away
-				ink := l.c0
-				if y == y0 || y == y0+10 {
-					ink = l.c2
-				} else if y == y0+1 || y == y0+9 {
-					ink = l.c1
-				}
-				for j := range len(row) {
-					if row[j] == '#' {
-						c[y][x0+1+j] = ink
-					}
+	for k := -1; k <= 1; k++ {
+		top := y0 + 2 + k*pitch
+		for r, row := range digitArt[(d+k+10)%10] {
+			y := top + r
+			if y < y0 || y > y0+10 {
+				continue
+			}
+			// the wheel's curve: a number dims as it turns away
+			c0 := ink[0]
+			if y == y0 || y == y0+10 {
+				c0 = ink[2]
+			} else if y == y0+1 || y == y0+9 {
+				c0 = ink[1]
+			}
+			for j := range len(row) {
+				if row[j] == '#' {
+					c[y][x0+1+j] = c0
 				}
 			}
 		}
@@ -238,43 +230,34 @@ func (c *canvas) well(x0, y0 int) {
 	}
 }
 
-// bars draws the day: px a bar, the one at cur still filling; shift
-// slides the whole day left, out past the chart's edge.
-func (c *canvas) bars(bars [12]int, cur, shift int) {
+// bars draws the day: px a bar, the one at cur still filling.
+func (c *canvas) bars(bars [12]int, cur int) {
 	for i, h := range bars {
-		x0 := barsX + i*3 - shift
+		x0 := barsX + i*3
 		fill, top := byte('L'), byte('I')
 		if i == cur {
 			fill, top = 'o', 'O'
 		}
 		for k := range h {
 			for j := range 2 {
-				if x0+j >= barsX {
-					ink := fill
-					if k == h-1 {
-						ink = top
-					}
-					c[barsBase-k][x0+j] = ink
+				ink := fill
+				if k == h-1 {
+					ink = top
 				}
+				c[barsBase-k][x0+j] = ink
 			}
 		}
 	}
 }
 
-// positions are where each of n wheels stands for a count, odometer
-// fashion: the last wheel turns with the count, and every other one only
-// while all the wheels to its right go from nine to nought. Counted in
-// numbers passed, not taken round ten, so a frame can tell how far each
-// went.
-func positions(v float64, n int) []float64 {
-	out := make([]float64, n)
-	for i := range n {
-		p := math.Pow(10, float64(n-1-i))
-		if p == 1 {
-			out[i] = v
-		} else {
-			out[i] = math.Floor(v/p) + math.Max(0, math.Mod(v, p)-(p-1))
-		}
+// digitsOf is a count on n wheels, the first on the left, nought-padded;
+// a count too long for them shows its last n digits, as a counter that
+// went round does.
+func digitsOf(v int64, n int) []int {
+	out := make([]int, n)
+	for i := n - 1; i >= 0; i-- {
+		out[i] = int(v % 10)
+		v /= 10
 	}
 	return out
 }
@@ -289,18 +272,17 @@ type counterDay struct {
 
 // counterFrame is one picture of the loop.
 type counterFrame struct {
-	wheels []float64 // the digit wheels' positions
-	blur   []bool
-	bars   [12]int // px
-	cur    int     // the bar still filling
-	lit    bool
-	shift  int
-	cs     int // how long it stands, in hundredths of a second
+	wheels []int    // the digit wheels, the first on the left
+	letter []string // a K or an M on the last wheel, or none
+	bars   [12]int  // px
+	cur    int      // the bar the clock is in, still filling
+	glow   int      // the lamp: 0 at rest, 1 rising, 2 full
+	cs     int      // how long it stands, in hundredths of a second
 }
 
 // unitOf is what the wheels count in: views while five wheels hold the
 // count; past that thousands on four, the last wheel a K; then millions.
-func unitOf(total int64) (unit float64, digits int, letter []string) {
+func unitOf(total int64) (unit int64, digits int, letter []string) {
 	switch {
 	case total < 100000:
 		return 1, wheels, nil
@@ -310,126 +292,51 @@ func unitOf(total int64) (unit float64, digits int, letter []string) {
 	return 1000000, wheels - 1, mArt
 }
 
-// counterFrames is the loop for a day.
+// breath is the lamp's: a rest, then the glow up through the dim ring to
+// the full one and down again.
+var breath = []struct{ glow, cs int }{{0, 240}, {1, 12}, {2, 50}, {1, 12}}
+
+// counterFrames is the loop for a day: the numbers as they stand, and
+// the lamp breathing over them.
 func counterFrames(d counterDay) []counterFrame {
-	unit, n, _ := unitOf(d.Total)
-	pos := func(v float64) []float64 {
-		if unit > 1 {
-			v = math.Floor(v / unit) // the wheels say what has been reached, never ahead of it
-		}
-		return positions(v, n)
-	}
-	px := func(views float64) int {
-		if views <= 0 || d.Top <= 0 {
-			return 0
-		}
-		return max(1, min(barTop, int(math.Round(views*barTop/float64(d.Top)))))
-	}
-	var whole [12]int
-	var today int64
+	unit, n, letter := unitOf(d.Total)
+	// the wheels say what has been reached, never ahead of it
+	f := counterFrame{wheels: digitsOf(d.Total/unit, n), letter: letter, cur: d.Now}
 	for i, v := range d.Bars {
-		whole[i] = px(float64(v))
-		today += v
-	}
-
-	var out []counterFrame
-	var last []float64
-	show := func(f counterFrame) {
-		if f.blur == nil {
-			f.blur = make([]bool, n)
-			for i := range f.wheels {
-				// a wheel that went more than two numbers since the last
-				// frame is a blur
-				f.blur[i] = last != nil && f.wheels[i]-last[i] > 2
-			}
-		}
-		last = f.wheels
-		out = append(out, f)
-	}
-
-	// the badge as it stands
-	show(counterFrame{wheels: pos(float64(d.Total)), bars: whole, cur: d.Now, cs: 400})
-	if today == 0 {
-		return out
-	}
-
-	// midnight: the day slides off the chart, and the wheels turn on to
-	// where it began and stop there one after another, the last first
-	start := float64(max(0, d.Total-today))
-	from, to := pos(float64(d.Total)), pos(start)
-	need := make([]float64, n)
-	steps := 4 // the slide: nine px a frame
-	for i := range n {
-		need[i] = math.Mod(math.Mod(to[i]-from[i], 10)+10, 10)
-		if need[i] > 0 {
-			steps = max(steps, n+1-i)
+		if v > 0 && d.Top > 0 {
+			// a bar with any views shows, however few
+			f.bars[i] = max(1, min(barTop, int(math.Round(float64(v)*barTop/float64(d.Top)))))
 		}
 	}
-	for s := 1; s <= steps; s++ {
-		ws, spin := make([]float64, n), make([]bool, n)
-		for i := range n {
-			stop := float64(n + 1 - i) // the last wheel stops on the second frame
-			ws[i] = from[i] + need[i]*min(1, float64(s)/stop)
-			spin[i] = need[i] > 0 && float64(s) < stop
-		}
-		show(counterFrame{wheels: ws, blur: spin, bars: whole, cur: d.Now, shift: min(36, s*9), cs: 4})
-	}
-	show(counterFrame{wheels: to, cur: -1, cs: 30}) // a new day
-
-	// the day again, two hours a beat
-	var bars [12]int
-	seen := start
-	for i := range d.Now {
-		half := float64(d.Bars[i]) / 2
-		bars[i] = px(half)
-		show(counterFrame{wheels: pos(seen + half), bars: bars, cur: i, lit: true, cs: 5})
-		seen += float64(d.Bars[i])
-		bars[i] = whole[i]
-		show(counterFrame{wheels: pos(seen), bars: bars, cur: i + 1, lit: true, cs: 5})
-	}
-	// and the two hours the clock is in, slowing the way a wheel does
-	// onto the count the loop opened on: the frame after the last of
-	// these is the first
-	rest := float64(d.Bars[d.Now])
-	gaps := []struct {
-		views float64
-		cs    int
-	}{{rest / 2, 5}, {72, 5}, {32, 5}, {14, 6}, {6, 6}, {3, 7}, {1.4, 8}, {0.5, 10}}
-	for i, g := range gaps {
-		if i > 0 {
-			g.views *= unit
-		}
-		if g.views >= rest || (i == 0 && g.views <= 72*unit) {
-			continue
-		}
-		bars[d.Now] = px(rest - g.views)
-		show(counterFrame{wheels: pos(float64(d.Total) - g.views), bars: bars, cur: d.Now, lit: true, cs: g.cs})
+	out := make([]counterFrame, len(breath))
+	for i, b := range breath {
+		f.glow, f.cs = b.glow, b.cs
+		out[i] = f
 	}
 	return out
 }
 
 // draw is a frame's picture.
-func (f counterFrame) draw(letter []string) *canvas {
+func (f counterFrame) draw() *canvas {
 	c := counterFace()
-	c.lamp(f.lit)
-	for i, p := range f.wheels {
-		c.wheel(i, p, f.blur[i])
+	c.lamp(f.glow)
+	for i, d := range f.wheels {
+		c.wheel(i, d)
 	}
-	if letter != nil {
-		c.letter(wheels-1, letter)
+	if f.letter != nil {
+		c.letter(wheels-1, f.letter)
 	}
-	c.bars(f.bars, f.cur, f.shift)
+	c.bars(f.bars, f.cur)
 	return c
 }
 
 // drawCounter is a day's Hit Counter as a GIF. After the first frame,
 // each holds only the box that changed, drawn over the one before.
 func drawCounter(d counterDay) []byte {
-	_, _, letter := unitOf(d.Total)
 	g := &gif.GIF{Config: image.Config{ColorModel: counterPal, Width: cw, Height: ch}}
 	var prev *canvas
 	for _, f := range counterFrames(d) {
-		c := f.draw(letter)
+		c := f.draw()
 		r := image.Rect(0, 0, cw, ch)
 		if prev != nil {
 			if r = changed(prev, c); r.Empty() {
