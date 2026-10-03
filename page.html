@@ -79,7 +79,7 @@ try {
 .sdesk .chips .chip a { display: inline-block; padding: 0 6px; margin-left: 4px; border-left: 1px solid #262626; line-height: 18px; text-decoration: none; color: #262626; background: #ddd; }
 /* the headline tiles: label, number, change against the span before */
 .sdesk .tiles { display: flex; flex-wrap: wrap; border-bottom: 1px solid #ddd; }
-.sdesk .tile { flex: 1 1 100px; min-width: 100px; padding: 8px 12px 9px; border-right: 1px solid #ddd; }
+.sdesk .tile { flex: 1 1 100px; min-width: 100px; padding: 9px 12px; border-right: 1px solid #ddd; }
 .sdesk .tile:last-child { border-right: 0; }
 /* tiles that wrap have a line between their rows. Which tiles stand in
    the first row is the browser's to say, so each wears a line on top,
@@ -92,6 +92,12 @@ try {
 .sdesk .tile .tl { font-size: 11px; color: #555; white-space: nowrap; }
 .sdesk .tile .tv { font-size: 18px; font-weight: bold; line-height: 24px; white-space: nowrap; }
 .sdesk .tile .td { font-size: 11px; color: #555; height: 14px; white-space: nowrap; }
+/* the words sit as far from the tile's foot as from its head: the
+   label's cap tops 11.5px down, the last line's baseline 11.5px up —
+   the change's, or with no span before to compare with (a new site),
+   the number's, its empty change line taking no room */
+.sdesk .tile .td:empty { display: none; }
+.sdesk .tile:has(.td:empty) { padding-bottom: 6px; }
 /* a number wider than its tile (a phone's third of the window, in
    Verdana) steps down from 18px until it fits, on its line of 24: the
    server says how many ems it runs (Tile.Em) */
