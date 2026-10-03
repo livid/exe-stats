@@ -162,20 +162,28 @@ func TestPage(t *testing.T) {
 // TestChartBars: the bars are the lines' buckets, a slot each — heights
 // in thousandths of the chart's top, rounded up so a bucket with a view
 // in it shows one; the bucket still filling marked, the ones after now
-// empty; a label at its slot's middle. The page carries both forms and
-// the control that picks between them.
+// empty; a label at its slot's middle; and the tip's words, the hour
+// (the first from where the span begins) and both counts. The page
+// carries both forms, the control that picks between them, and the
+// words on each slot.
 func TestChartBars(t *testing.T) {
+	at := func(h, m int) time.Time { return time.Date(2026, 10, 2, h, m, 0, 0, time.UTC) }
 	pts := []Point{
-		{Pageviews: 40, Visitors: 10, Label: "00:00"},
-		{Pageviews: 1, Visitors: 1},
-		{Pageviews: 5, Visitors: 3, Label: "02:00"},
-		{Future: true, Label: "03:00"},
+		{Pageviews: 40, Visitors: 10, Label: "00:00", start: at(0, 0)},
+		{Pageviews: 1, Visitors: 1, start: at(1, 0)},
+		{Pageviews: 5, Visitors: 3, Label: "02:00", start: at(2, 0)},
+		{Future: true, Label: "03:00", start: at(3, 0)},
 	}
-	c := chartOf(pts, Span{IncompleteLast: true})
+	c := chartOf(pts, Span{Step: "hour", From: at(0, 38), IncompleteLast: true})
 	if c.Max != 40 {
 		t.Fatalf("the chart's top is %d, want 40", c.Max)
 	}
-	want := []Bar{{Views: 1000, Visitors: 250}, {Views: 25, Visitors: 25}, {Views: 125, Visitors: 75, Filling: true}, {Future: true}}
+	want := []Bar{
+		{Views: 1000, Visitors: 250, When: "Oct 2, 00:38 – 01:00", Count: "40 page views · 10 visitors"},
+		{Views: 25, Visitors: 25, When: "Oct 2, 01:00 – 02:00", Count: "1 page view · 1 visitor"},
+		{Views: 125, Visitors: 75, Filling: true, When: "Oct 2, 02:00 – 03:00 · still filling", Count: "5 page views · 3 visitors"},
+		{Future: true},
+	}
 	if len(c.Bars) != len(want) {
 		t.Fatalf("%d bars, want %d", len(c.Bars), len(want))
 	}
@@ -187,6 +195,12 @@ func TestChartBars(t *testing.T) {
 	if h := chartOf([]Point{{Pageviews: 4001, Visitors: 1}}, Span{}).Bars[0]; h.Views != 667 || h.Visitors != 1 {
 		t.Errorf("4,001 and 1 under a top of 6,000 are %d and %d thousandths, want 667 and 1", h.Views, h.Visitors)
 	}
+	if w := whenOf(Span{Step: "day"}, at(0, 0)); w != "Fri, Oct 2" {
+		t.Errorf("a day says %q", w)
+	}
+	if w := whenOf(Span{Step: "month"}, at(0, 0)); w != "October 2026" {
+		t.Errorf("a month says %q", w)
+	}
 	if got := []float64{c.X[0].Mid, c.X[1].Mid, c.X[2].Mid}; got[0] != 12.5 || got[1] != 62.5 || got[2] != 87.5 {
 		t.Errorf("the labels stand at %v of the bars' plot, want [12.5 62.5 87.5]", got)
 	}
@@ -197,7 +211,7 @@ func TestChartBars(t *testing.T) {
 	}
 	_, body := get(t, s.Handler(), "/stats?range=24h")
 	for _, want := range []string{`<polyline class="pv"`, `<div class="bc" style="--n: 2`, `data-chart="line"`, `data-chart="bar"`,
-		`localStorage.getItem("exe-stats-chart")`} {
+		`localStorage.getItem("exe-stats-chart")`, `page view · 1 visitor"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the page does not carry %q", want)
 		}

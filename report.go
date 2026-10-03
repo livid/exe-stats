@@ -607,11 +607,13 @@ type Chart struct {
 }
 
 // Bar is one bucket as a pair of bars, page views and visitors, each
-// in thousandths of the chart's top.
+// in thousandths of the chart's top, and what the tip over it says.
 type Bar struct {
 	Views, Visitors int
-	Filling         bool // the bucket still filling, drawn lighter
-	Future          bool // after now: a slot on the axis, no bars
+	Filling         bool   // the bucket still filling, drawn lighter
+	Future          bool   // after now: a slot on the axis, no bars
+	When            string // the bucket's time in words: "Oct 2, 14:00 – 15:00"
+	Count           string // "1,234 page views · 567 visitors"
 }
 
 type XLabel struct {
@@ -1036,8 +1038,15 @@ func chartOf(pts []Point, sp Span) Chart {
 	// with anything in it shows something
 	h := func(v int) int { return (v*1000 + c.Max - 1) / c.Max }
 	for i, p := range pts {
-		c.Bars = append(c.Bars, Bar{Views: h(p.Pageviews), Visitors: h(p.Visitors),
-			Filling: sp.IncompleteLast && i == last, Future: i > last})
+		b := Bar{Views: h(p.Pageviews), Visitors: h(p.Visitors), Filling: sp.IncompleteLast && i == last, Future: i > last}
+		if !b.Future {
+			b.When = whenOf(sp, p.start)
+			if b.Filling {
+				b.When += " · still filling"
+			}
+			b.Count = counted(p.Pageviews, "page view") + " · " + counted(p.Visitors, "visitor")
+		}
+		c.Bars = append(c.Bars, b)
 	}
 	for i, p := range pts {
 		if p.Label == "" {
@@ -1052,6 +1061,31 @@ func chartOf(pts []Point, sp Span) Chart {
 		c.X = append(c.X, l)
 	}
 	return c
+}
+
+// whenOf says a bucket's time for the tip over its bars: an hour as the
+// hour it spans (24 hours' first from where the span begins, inside
+// it), a day as its date, a month by name.
+func whenOf(sp Span, b time.Time) string {
+	switch sp.Step {
+	case "hour":
+		from := b
+		if from.Before(sp.From) {
+			from = sp.From
+		}
+		return from.Format("Jan 2, 15:04") + " – " + b.Add(time.Hour).Format("15:04")
+	case "day":
+		return b.Format("Mon, Jan 2")
+	}
+	return b.Format("January 2006")
+}
+
+// counted is a count and its noun: "1 visitor", "1,234 page views".
+func counted(n int, noun string) string {
+	if n == 1 {
+		return "1 " + noun
+	}
+	return num(n) + " " + noun + "s"
 }
 
 // RowView draws one row: the label (a country by name with its
