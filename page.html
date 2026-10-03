@@ -123,10 +123,12 @@ try {
   height: calc(var(--v) * .1cqh); height: round(up, var(--v) * .1cqh, 2px); }
 .sdesk .chart .bc b.vi { background: #ffcc99; border-top-color: #ff6600; }
 .sdesk .chart .bc i.end b { background: #ebebff; border-top-color: #ccccff; }
-/* the reading under the pointer, over the bars: the slot's time and its
-   two counts in the yellow tip the Analytics app (and Tides) wears,
-   beside the slot at the plot's top. It is the main window's, outside
-   the frame the refresh swaps. */
+/* the reading under the pointer, over the bars: a 1px line down the
+   plot on the slot, where its two bars meet, and the slot's time and
+   its two counts in the yellow tip, beside it at the plot's top — the
+   Analytics app's line and tip (the tip Tides wears). Both are the main
+   window's, outside the frame the refresh swaps. */
+.sdesk .scur { position: absolute; z-index: 5; width: 0; border-left: 1px solid #262626; pointer-events: none; }
 .sdesk .stip { position: absolute; z-index: 5; pointer-events: none; background: #ffffcc;
   border: 1px solid #262626; box-shadow: 1px 1px 0 rgba(0,0,0,.35);
   font-size: 10px; line-height: 1.3; padding: 2px 6px; white-space: nowrap; }
@@ -257,27 +259,38 @@ try {
     mark(document);
     try { localStorage.setItem("exe-stats-chart", b.dataset.chart); } catch (e) {}
   });
-  // the tip over the bars: the slot under the pointer (or the finger)
-  // says its time and counts, beside it, until the pointer leaves the
-  // bars or presses elsewhere; a refresh that redraws the chart under a
-  // still pointer reads the new slot there
-  const win = document.querySelector(".sdesk .window.main"), tip = document.createElement("div");
+  // the reading over the bars: the slot under the pointer (or the
+  // finger) gets the line down the plot where its bars meet, and says
+  // its time and counts in the tip beside it, until the pointer leaves
+  // the bars or presses elsewhere; a refresh that redraws the chart under
+  // a still pointer reads the new slot there
+  const win = document.querySelector(".sdesk .window.main"), cur = document.createElement("div"), tip = document.createElement("div");
+  cur.className = "scur";
   tip.className = "stip";
-  tip.hidden = true;
-  if (win) win.append(tip);
+  cur.hidden = tip.hidden = true;
+  if (win) win.append(cur, tip);
   let told = null, px = 0, py = 0;
   const tell = slot => {
     told = slot && slot.dataset.when ? slot : null;
-    if (!told || !win) { tip.hidden = true; return; }
+    if (!told || !win) { cur.hidden = tip.hidden = true; return; }
     const head = document.createElement("b");
     head.textContent = told.dataset.when;
     tip.replaceChildren(head, document.createElement("br"), told.dataset.n);
-    tip.hidden = false;
-    const w = win.getBoundingClientRect(), r = told.getBoundingClientRect(), plot = told.closest(".plot").getBoundingClientRect();
+    tip.hidden = cur.hidden = false;
+    // each put where it belongs on the page, from where it stands at
+    // 0, 0 — the window's border is no whole pixel at 1.5x, whatever
+    // clientTop says
+    const put = (el, x, y) => {
+      el.style.left = el.style.top = "0px";
+      const o = el.getBoundingClientRect();
+      el.style.left = x - o.left + "px";
+      el.style.top = y - o.top + "px";
+    };
+    const r = told.getBoundingClientRect(), bars = told.parentElement.getBoundingClientRect(); // the plot inside its axes
+    cur.style.height = bars.height + "px";
+    put(cur, told.querySelector("b").getBoundingClientRect().right, bars.top);
     const tw = tip.offsetWidth;
-    const x = r.right + 4 + tw <= plot.right ? r.right + 4 : Math.max(plot.left, r.left - 4 - tw);
-    tip.style.left = x - w.left + "px";
-    tip.style.top = plot.top - w.top + 4 + "px";
+    put(tip, r.right + 4 + tw <= bars.right ? r.right + 4 : Math.max(bars.left, r.left - 4 - tw), bars.top + 4);
   };
   const point = e => {
     px = e.clientX; py = e.clientY;
