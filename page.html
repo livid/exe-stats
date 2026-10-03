@@ -81,6 +81,14 @@ try {
 .sdesk .tiles { display: flex; flex-wrap: wrap; border-bottom: 1px solid #ddd; }
 .sdesk .tile { flex: 1 1 100px; min-width: 100px; padding: 8px 12px 9px; border-right: 1px solid #ddd; }
 .sdesk .tile:last-child { border-right: 0; }
+/* tiles that wrap have a line between their rows. Which tiles stand in
+   the first row is the browser's to say, so each wears a line on top,
+   and the tiles stand a pixel up under the strip over them, whose own
+   line covers the first row's: one line there, as before */
+@media (min-width: 481px) {
+  .sdesk .tiles { margin-top: -1px; }
+  .sdesk .tile { border-top: 1px solid #ddd; }
+  .sdesk .main .strip { position: relative; z-index: 1; } }
 .sdesk .tile .tl { font-size: 11px; color: #555; white-space: nowrap; }
 .sdesk .tile .tv { font-size: 18px; font-weight: bold; line-height: 24px; white-space: nowrap; }
 .sdesk .tile .td { font-size: 11px; color: #555; height: 14px; white-space: nowrap; }
@@ -187,6 +195,7 @@ try {
   /* the numbers three abreast, in columns that line up row on row */
   .sdesk .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .sdesk .tile { min-width: 0; } .sdesk .tile:nth-child(3n) { border-right: 0; }
+  .sdesk .tile:nth-child(-n+3) { border-bottom: 1px solid #ddd; } /* the first row's, over the second */
   .sdesk .chart .xs span:nth-child(even) { display: none; }
   /* the bars as wide as their slot allows, in whole pixels as the hero's
      cells are on a phone, a pixel at least between buckets */
