@@ -159,6 +159,51 @@ func TestPage(t *testing.T) {
 	}
 }
 
+// TestChartBars: the bars are the lines' buckets, a slot each — heights
+// in thousandths of the chart's top, rounded up so a bucket with a view
+// in it shows one; the bucket still filling marked, the ones after now
+// empty; a label at its slot's middle. The page carries both forms and
+// the control that picks between them.
+func TestChartBars(t *testing.T) {
+	pts := []Point{
+		{Pageviews: 40, Visitors: 10, Label: "00:00"},
+		{Pageviews: 1, Visitors: 1},
+		{Pageviews: 5, Visitors: 3, Label: "02:00"},
+		{Future: true, Label: "03:00"},
+	}
+	c := chartOf(pts, Span{IncompleteLast: true})
+	if c.Max != 40 {
+		t.Fatalf("the chart's top is %d, want 40", c.Max)
+	}
+	want := []Bar{{Views: 1000, Visitors: 250}, {Views: 25, Visitors: 25}, {Views: 125, Visitors: 75, Filling: true}, {Future: true}}
+	if len(c.Bars) != len(want) {
+		t.Fatalf("%d bars, want %d", len(c.Bars), len(want))
+	}
+	for i := range want {
+		if c.Bars[i] != want[i] {
+			t.Errorf("bar %d is %+v, want %+v", i, c.Bars[i], want[i])
+		}
+	}
+	if h := chartOf([]Point{{Pageviews: 4001, Visitors: 1}}, Span{}).Bars[0]; h.Views != 667 || h.Visitors != 1 {
+		t.Errorf("4,001 and 1 under a top of 6,000 are %d and %d thousandths, want 667 and 1", h.Views, h.Visitors)
+	}
+	if got := []float64{c.X[0].Mid, c.X[1].Mid, c.X[2].Mid}; got[0] != 12.5 || got[1] != 62.5 || got[2] != 87.5 {
+		t.Errorf("the labels stand at %v of the bars' plot, want [12.5 62.5 87.5]", got)
+	}
+
+	s := testStats(t)
+	if err := s.db.Add([]Hit{{TS: time.Now().UnixMilli() - 60_000, VID: "a", SID: "s1", Entry: true, Path: "/", Kind: "home", Channel: "direct"}}); err != nil {
+		t.Fatal(err)
+	}
+	_, body := get(t, s.Handler(), "/stats?range=24h")
+	for _, want := range []string{`<polyline class="pv"`, `<div class="bc" style="--n: 2`, `data-chart="line"`, `data-chart="bar"`,
+		`localStorage.getItem("exe-stats-chart")`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the page does not carry %q", want)
+		}
+	}
+}
+
 func TestStatsLanes(t *testing.T) {
 	for _, c := range []struct {
 		rows []int

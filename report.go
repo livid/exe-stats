@@ -593,20 +593,32 @@ type Chip struct {
 
 // Chart is the chart's geometry: two polylines in a 1000×1000 box
 // stretched to the plot (strokes non-scaling, so they stay 2px), the
-// y-axis labels and the x-axis labels with their positions.
+// same buckets as bars, the y-axis labels and the x-axis labels with
+// their positions. The page draws the lines or the bars, whichever the
+// reader last pressed; both come with every page.
 type Chart struct {
 	Views, Visitors  string // "x,y x,y …" up to the last complete bucket
 	ViewsEnd, VisEnd string // the segment into the incomplete bucket
+	Bars             []Bar
 	Y                []string
 	X                []XLabel
 	Max              int
 	Empty            bool
 }
 
+// Bar is one bucket as a pair of bars, page views and visitors, each
+// in thousandths of the chart's top.
+type Bar struct {
+	Views, Visitors int
+	Filling         bool // the bucket still filling, drawn lighter
+	Future          bool // after now: a slot on the axis, no bars
+}
+
 type XLabel struct {
 	Label string
-	Pct   float64
-	Edge  string // "first" | "last" | ""
+	Pct   float64 // where the lines put its bucket, per cent of the plot
+	Mid   float64 // the middle of its bucket's slot, where the bars stand
+	Edge  string  // "first" | "last" | ""
 }
 
 // shown caps a list on the page; the JSON has them all.
@@ -1020,11 +1032,18 @@ func chartOf(pts []Point, sp Span) Chart {
 		c.ViewsEnd = fmt.Sprintf("%.1f,%.1f %.1f,%.1f", x(end), y(pts[end].Pageviews), x(last), y(pts[last].Pageviews))
 		c.VisEnd = fmt.Sprintf("%.1f,%.1f %.1f,%.1f", x(end), y(pts[end].Visitors), x(last), y(pts[last].Visitors))
 	}
+	// the bars: a slot a bucket, the thousandths rounded up so a bucket
+	// with anything in it shows something
+	h := func(v int) int { return (v*1000 + c.Max - 1) / c.Max }
+	for i, p := range pts {
+		c.Bars = append(c.Bars, Bar{Views: h(p.Pageviews), Visitors: h(p.Visitors),
+			Filling: sp.IncompleteLast && i == last, Future: i > last})
+	}
 	for i, p := range pts {
 		if p.Label == "" {
 			continue
 		}
-		l := XLabel{Label: p.Label, Pct: x(i) / 10}
+		l := XLabel{Label: p.Label, Pct: x(i) / 10, Mid: (float64(i) + .5) * 100 / float64(n)}
 		if i == 0 {
 			l.Edge = "first"
 		} else if i == n-1 {
