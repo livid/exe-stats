@@ -178,7 +178,11 @@ try {
 /* a phone: narrower name and label columns, and every other axis label
    dropped so the words never overlap */
 @media (max-width: 480px) { .sdesk .live .row .who { width: 104px; } .sdesk .tile { flex-basis: 84px; min-width: 84px; } .sdesk .chart { grid-template-columns: 34px 1fr; }
-  .sdesk .chart .xs span:nth-child(even) { display: none; } }
+  .sdesk .chart .xs span:nth-child(even) { display: none; }
+  /* the bars as wide as their slot allows, in whole pixels as the hero's
+     cells are on a phone, a pixel at least between buckets */
+  .sdesk .chart .bc b { width: max(1px, calc((100cqw / var(--n) - 1px) / 2));
+    width: max(1px, round(down, (100cqw / var(--n) - 1px) / 2, 1px)); } }
 </style>
 {{end}}
 {{define "stats"}}{{with .}}<div class="sdesk">
