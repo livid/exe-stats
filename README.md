@@ -89,9 +89,9 @@ from memory, and the 24 hours 0.26 s where they took 10.5 s.
 Visitors, page views, sessions, bounce rate and session time, each
 against the span before; a chart of page views and visitors, as lines
 or as bars (a segmented control beside the online count picks, and the
-browser remembers the pick; the pointer over a bar, or a tap, shows its
-time and counts in a tip, a line up from the bar turning at a right
-angle into it); who is
+browser remembers the pick; the pointer over either, or a tap, shows a
+bucket's time and counts in a tip, a line up from the bucket turning at
+a right angle into it); who is
 reading right now; and ranked lists of sources, channels and campaigns,
 pages by top, entry and exit, countries, regions, cities and languages,
 devices, browsers and systems, and the crawlers with the pages they

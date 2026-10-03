@@ -123,13 +123,14 @@ try {
   height: calc(var(--v) * .1cqh); height: round(up, var(--v) * .1cqh, 2px); }
 .sdesk .chart .bc b.vi { background: #ffcc99; border-top-color: #ff6600; }
 .sdesk .chart .bc i.end b { background: #ebebff; border-top-color: #ccccff; }
-/* the reading under the pointer, over the bars: the slot's time and its
-   two counts in the yellow tip (the Analytics app's, and Tides'),
-   beside it at the plot's top, and a 1px line up from the floor where
-   the slot's two bars meet that turns at a right angle into the middle
-   of the tip's near border — one box, its left (or right) border and
-   its top, so the corner is one pixel. Both are the main window's,
-   outside the frame the refresh swaps. */
+/* the reading under the pointer, over the bars or the lines: the
+   bucket's time and its two counts in the yellow tip (the Analytics
+   app's, and Tides'), beside it at the plot's top, and a 1px line up
+   from the floor — where the bucket's two bars meet, or through its
+   point — that turns at a right angle into the middle of the tip's near
+   border: one box, its left (or right) border and its top, so the
+   corner is one pixel. Both are the main window's, outside the frame
+   the refresh swaps. */
 .sdesk .scur { position: absolute; z-index: 5; box-sizing: border-box; border: 0 solid #262626; pointer-events: none; }
 .sdesk .stip { position: absolute; z-index: 5; pointer-events: none; background: #ffffcc;
   border: 1px solid #262626; box-shadow: 1px 1px 0 rgba(0,0,0,.35);
@@ -261,20 +262,43 @@ try {
     mark(document);
     try { localStorage.setItem("exe-stats-chart", b.dataset.chart); } catch (e) {}
   });
-  // the reading over the bars: the slot under the pointer (or the
-  // finger) gets the line down the plot where its bars meet, and says
-  // its time and counts in the tip beside it, until the pointer leaves
-  // the bars or presses elsewhere; a refresh that redraws the chart under
-  // a still pointer reads the new slot there
+  // the reading under the pointer (or the finger), over either form:
+  // the bucket it is on — over the bars the slot it is in, over the
+  // lines the nearest point — gets a line up from the floor, where its
+  // two bars meet or through its point, that turns at a right angle
+  // into the tip beside it, which says the bucket's time and counts;
+  // until the pointer leaves the chart or presses elsewhere. The words
+  // are the bar slots' in either form. A refresh that redraws the chart
+  // under a still pointer reads the bucket there again.
   const win = document.querySelector(".sdesk .window.main"), cur = document.createElement("div"), tip = document.createElement("div");
   cur.className = "scur";
   tip.className = "stip";
   cur.hidden = tip.hidden = true;
   if (win) win.append(cur, tip);
   let told = null, px = 0, py = 0;
-  const tell = slot => {
-    told = slot && slot.dataset.when ? slot : null;
-    if (!told || !win) { cur.hidden = tip.hidden = true; return; }
+  // 1px as the screen draws a border: whole device pixels
+  const hair = () => Math.max(1, Math.floor(devicePixelRatio)) / devicePixelRatio;
+  // the bucket at a point on the page: its slot (its words), where the
+  // line stands, the room it has either side, and the plot inside its
+  // axes — the bars' box or the lines', whichever is shown
+  const aim = (el, x) => {
+    const plot = el && el.closest ? el.closest(".sdesk .chart .plot") : null, slots = plot ? plot.querySelectorAll(".bc i") : [];
+    if (!slots.length) return null;
+    if (root.classList.contains("stats-bars")) {
+      const slot = el.closest(".bc i");
+      if (!slot || !slot.dataset.when) return null;
+      const r = slot.getBoundingClientRect();
+      return { slot, x: slot.querySelector("b").getBoundingClientRect().right, left: r.left, right: r.right, box: slot.parentElement.getBoundingClientRect() };
+    }
+    const box = plot.querySelector("svg").getBoundingClientRect(), n = slots.length, step = n > 1 ? box.width / (n - 1) : box.width;
+    const i = n > 1 ? Math.round(Math.min(1, Math.max(0, (x - box.left) / box.width)) * (n - 1)) : 0;
+    if (!slots[i].dataset.when) return null; // after now: no point there
+    const at = box.left + (n > 1 ? i * step : 0);
+    return { slot: slots[i], x: at - hair() / 2, left: at - step / 2, right: at + step / 2, box };
+  };
+  const tell = a => {
+    told = a ? a.slot : null;
+    if (!a || !win) { cur.hidden = tip.hidden = true; return; }
     const head = document.createElement("b");
     head.textContent = told.dataset.when;
     tip.replaceChildren(head, document.createElement("br"), told.dataset.n);
@@ -288,41 +312,32 @@ try {
       el.style.left = x - o.left + "px";
       el.style.top = y - o.top + "px";
     };
-    const r = told.getBoundingClientRect(), bars = told.parentElement.getBoundingClientRect(); // the plot inside its axes
-    const tw = tip.offsetWidth;
-    put(tip, r.right + 4 + tw <= bars.right ? r.right + 4 : Math.max(bars.left, r.left - 4 - tw), bars.top + 4);
-    // the line: up from the floor at the seam, then at a right angle to
-    // the middle of the tip's near border — its left one, or its right
-    // one when the tip stands to the left; where a phone's tip covers
-    // the seam, straight up to the tip's foot
-    const seam = told.querySelector("b").getBoundingClientRect().right, t = tip.getBoundingClientRect();
-    let x = seam, y = t.top + Math.floor(t.height / 2), w = 0, edges = "1px 0 0 1px";
-    if (t.left >= seam) w = t.left - seam;
-    else if (t.right <= seam) edges = "1px 1px 0 0";
+    const b = a.box, tw = tip.offsetWidth;
+    put(tip, a.right + 4 + tw <= b.right ? a.right + 4 : Math.max(b.left, a.left - 4 - tw), b.top + 4);
+    // the line: up from the floor, then at a right angle to the middle
+    // of the tip's near border — its left one, or its right one when the
+    // tip stands to the left; where a phone's tip covers the line's
+    // place, straight up to the tip's foot
+    const t = tip.getBoundingClientRect();
+    let x = a.x, y = t.top + Math.floor(t.height / 2), w = 0, edges = "1px 0 0 1px";
+    if (t.left >= a.x) w = t.left - a.x;
+    else if (t.right <= a.x) { edges = "1px 1px 0 0"; x = t.right; w = a.x + hair() - t.right; }
     else { y = t.bottom; edges = "0 0 0 1px"; }
     cur.style.borderWidth = edges;
-    if (edges === "1px 1px 0 0") { // the right border on the seam: as wide as the screen draws 1px
-      x = t.right;
-      w = seam + parseFloat(getComputedStyle(cur).borderRightWidth) - t.right;
-    }
     cur.style.width = Math.max(0, w) + "px";
-    cur.style.height = bars.bottom - y + "px";
+    cur.style.height = b.bottom - y + "px";
     put(cur, x, y);
   };
   const point = e => {
     px = e.clientX; py = e.clientY;
-    const slot = e.target.closest ? e.target.closest(".bc i") : null;
-    if (slot !== told || slot && tip.hidden) tell(slot);
+    const a = aim(e.target, e.clientX);
+    if (a ? a.slot !== told || tip.hidden : told) tell(a);
   };
   document.addEventListener("pointermove", point);
   document.addEventListener("pointerdown", point);
   // a mouse off the page; a finger lifted leaves too, and its tip stays
   document.documentElement.addEventListener("pointerleave", e => { if (e.pointerType === "mouse") tell(null); });
-  const retell = () => {
-    if (!told) return;
-    const e = document.elementFromPoint(px, py);
-    tell(e && e.closest(".bc i"));
-  };
+  const retell = () => { if (told) tell(aim(document.elementFromPoint(px, py), px)); };
   const swap = html => {
     const fresh = new DOMParser().parseFromString(html, "text/html");
     mark(fresh);
