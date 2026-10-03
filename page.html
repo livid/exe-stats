@@ -196,6 +196,7 @@ try {
   .sdesk .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .sdesk .tile { min-width: 0; } .sdesk .tile:nth-child(3n) { border-right: 0; }
   .sdesk .tile:nth-child(-n+3) { border-bottom: 1px solid #ddd; } /* the first row's, over the second */
+  .sdesk .tile:last-child:not(:nth-child(3n)) { border-right: 1px solid #ddd; } /* the last, short of the row's end, closes its cell */
   .sdesk .chart .xs span:nth-child(even) { display: none; }
   /* the bars as wide as their slot allows, in whole pixels as the hero's
      cells are on a phone, a pixel at least between buckets */
