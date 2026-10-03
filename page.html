@@ -123,12 +123,14 @@ try {
   height: calc(var(--v) * .1cqh); height: round(up, var(--v) * .1cqh, 2px); }
 .sdesk .chart .bc b.vi { background: #ffcc99; border-top-color: #ff6600; }
 .sdesk .chart .bc i.end b { background: #ebebff; border-top-color: #ccccff; }
-/* the reading under the pointer, over the bars: a 1px line down the
-   plot on the slot, where its two bars meet, and the slot's time and
-   its two counts in the yellow tip, beside it at the plot's top — the
-   Analytics app's line and tip (the tip Tides wears). Both are the main
-   window's, outside the frame the refresh swaps. */
-.sdesk .scur { position: absolute; z-index: 5; width: 0; border-left: 1px solid #262626; pointer-events: none; }
+/* the reading under the pointer, over the bars: the slot's time and its
+   two counts in the yellow tip (the Analytics app's, and Tides'),
+   beside it at the plot's top, and a 1px line up from the floor where
+   the slot's two bars meet that turns at a right angle into the middle
+   of the tip's near border — one box, its left (or right) border and
+   its top, so the corner is one pixel. Both are the main window's,
+   outside the frame the refresh swaps. */
+.sdesk .scur { position: absolute; z-index: 5; box-sizing: border-box; border: 0 solid #262626; pointer-events: none; }
 .sdesk .stip { position: absolute; z-index: 5; pointer-events: none; background: #ffffcc;
   border: 1px solid #262626; box-shadow: 1px 1px 0 rgba(0,0,0,.35);
   font-size: 10px; line-height: 1.3; padding: 2px 6px; white-space: nowrap; }
@@ -287,10 +289,25 @@ try {
       el.style.top = y - o.top + "px";
     };
     const r = told.getBoundingClientRect(), bars = told.parentElement.getBoundingClientRect(); // the plot inside its axes
-    cur.style.height = bars.height + "px";
-    put(cur, told.querySelector("b").getBoundingClientRect().right, bars.top);
     const tw = tip.offsetWidth;
     put(tip, r.right + 4 + tw <= bars.right ? r.right + 4 : Math.max(bars.left, r.left - 4 - tw), bars.top + 4);
+    // the line: up from the floor at the seam, then at a right angle to
+    // the middle of the tip's near border — its left one, or its right
+    // one when the tip stands to the left; where a phone's tip covers
+    // the seam, straight up to the tip's foot
+    const seam = told.querySelector("b").getBoundingClientRect().right, t = tip.getBoundingClientRect();
+    let x = seam, y = t.top + Math.floor(t.height / 2), w = 0, edges = "1px 0 0 1px";
+    if (t.left >= seam) w = t.left - seam;
+    else if (t.right <= seam) edges = "1px 1px 0 0";
+    else { y = t.bottom; edges = "0 0 0 1px"; }
+    cur.style.borderWidth = edges;
+    if (edges === "1px 1px 0 0") { // the right border on the seam: as wide as the screen draws 1px
+      x = t.right;
+      w = seam + parseFloat(getComputedStyle(cur).borderRightWidth) - t.right;
+    }
+    cur.style.width = Math.max(0, w) + "px";
+    cur.style.height = bars.bottom - y + "px";
+    put(cur, x, y);
   };
   const point = e => {
     px = e.clientX; py = e.clientY;
