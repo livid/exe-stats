@@ -93,11 +93,9 @@ try {
 .sdesk .tile .tv { font-size: 18px; font-weight: bold; line-height: 24px; white-space: nowrap; }
 .sdesk .tile .td { font-size: 11px; color: #555; height: 14px; white-space: nowrap; }
 /* the words sit as far from the tile's foot as from its head: the
-   label's cap tops 11.5px down, the last line's baseline 11.5px up —
-   the change's, or with no span before to compare with (a new site),
-   the number's, its empty change line taking no room */
-.sdesk .tile .td:empty { display: none; }
-.sdesk .tile:has(.td:empty) { padding-bottom: 6px; }
+   label's cap tops 11.5px down, the change's baseline 11.5px up. The
+   change's line is never empty — a dash when there is nothing to
+   compare with — so a tile never grows or settles when one arrives */
 /* a number wider than its tile (a phone's third of the window, in
    Verdana) steps down from 18px until it fits, on its line of 24: the
    server says how many ems it runs (Tile.Em) */

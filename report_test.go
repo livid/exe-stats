@@ -227,8 +227,20 @@ func TestTileEm(t *testing.T) {
 		}
 	}
 	_, body := get(t, testStats(t).Handler(), "/stats")
-	if !strings.Contains(body, `<div class="tv" style="--em: 1.00">0</div>`) {
-		t.Error("the tiles do not say how wide their numbers run")
+	if !strings.Contains(body, `<div class="tv" style="--em: 1.00">0</div><div class="td">—</div>`) {
+		t.Error("the tiles do not say how wide their numbers run, or a change with nothing before it is not a dash")
+	}
+	// a change's line is never empty: a dash holds it until there is a span before to compare with
+	now := Summary{Visitors: 3, Pageviews: 5, Sessions: 4, Bounces: 2, Duration: 30}
+	for _, tl := range tiles(now, Summary{}) {
+		if tl.Delta != "—" {
+			t.Errorf("%s with nothing before says %q, want a dash", tl.Label, tl.Delta)
+		}
+	}
+	for _, tl := range tiles(now, Summary{Visitors: 2, Pageviews: 5, Sessions: 2, Bounces: 1, Duration: 60}) {
+		if tl.Delta == "—" || tl.Delta == "" {
+			t.Errorf("%s against a span before says %q, want its change", tl.Label, tl.Delta)
+		}
 	}
 }
 

@@ -969,6 +969,14 @@ func tiles(cur, prev Summary) []Tile {
 	if prev.Duration > 0 && cur.Sessions > 0 {
 		tiles[4].Delta = signed((cur.Duration-prev.Duration)/prev.Duration*100, "%")
 	}
+	// nothing to compare with (a site younger than the span before, a
+	// span without sessions): a dash holds the change's line, so the
+	// tile has its whole shape before a change arrives to take its place
+	for i := range tiles {
+		if tiles[i].Delta == "" {
+			tiles[i].Delta = "—"
+		}
+	}
 	return tiles
 }
 
