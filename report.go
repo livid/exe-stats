@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -533,6 +534,33 @@ func ago(d time.Duration) string {
 // Tile is one headline number and its change against the span before.
 type Tile struct {
 	Label, Value, Delta string
+}
+
+// Em is how wide the tile's number runs, in ems of Verdana Bold (the
+// widest face the desk's type falls to, a phone's; DejaVu Sans Bold's
+// widths, a little over): the page lets a number wider than its tile
+// step down from 18px until it fits.
+func (t Tile) Em() string {
+	w := 0.0
+	for _, r := range t.Value {
+		switch {
+		case r >= '0' && r <= '9':
+			w += .711
+		case r == ',' || r == '.':
+			w += .38
+		case r == ' ':
+			w += .35
+		case r == '%':
+			w += 1.27
+		case r == 'm':
+			w += 1.06
+		case r == 's':
+			w += .6
+		default:
+			w += .72
+		}
+	}
+	return strconv.FormatFloat(math.Max(w, 1), 'f', 2, 64)
 }
 
 // List is one ranked-list window as the page draws it: its views

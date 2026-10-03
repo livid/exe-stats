@@ -82,8 +82,14 @@ try {
 .sdesk .tile { flex: 1 1 100px; min-width: 100px; padding: 8px 12px 9px; border-right: 1px solid #ddd; }
 .sdesk .tile:last-child { border-right: 0; }
 .sdesk .tile .tl { font-size: 11px; color: #555; white-space: nowrap; }
-.sdesk .tile .tv { font-size: 18px; font-weight: bold; line-height: 24px; }
+.sdesk .tile .tv { font-size: 18px; font-weight: bold; line-height: 24px; white-space: nowrap; }
 .sdesk .tile .td { font-size: 11px; color: #555; height: 14px; white-space: nowrap; }
+/* a number wider than its tile (a phone's third of the window, in
+   Verdana) steps down from 18px until it fits, on its line of 24: the
+   server says how many ems it runs (Tile.Em) */
+@supports (font-size: 1cqw) {
+  .sdesk .tile { container-type: inline-size; }
+  .sdesk .tile .tv { font-size: min(18px, 100cqw / var(--em, 1)); } }
 /* the chart: y labels in a column, the plot a box with its grid drawn as
    the top borders of four boxes, the lines an SVG stretched over it
    with non-scaling 2px strokes, x labels in a row under it */
@@ -175,9 +181,12 @@ try {
    reads the same wherever it is drawn. */
 .sdesk .statusbar a { font-weight: bold; text-decoration: none; }
 .sdesk .statusbar a:hover { text-decoration: underline; }
-/* a phone: narrower name and label columns, and every other axis label
-   dropped so the words never overlap */
-@media (max-width: 480px) { .sdesk .live .row .who { width: 104px; } .sdesk .tile { flex-basis: 84px; min-width: 84px; } .sdesk .chart { grid-template-columns: 34px 1fr; }
+/* a phone: narrower name and label columns, the numbers three to a
+   row, and every other axis label dropped so the words never overlap */
+@media (max-width: 480px) { .sdesk .live .row .who { width: 104px; } .sdesk .chart { grid-template-columns: 34px 1fr; }
+  /* the numbers three abreast, in columns that line up row on row */
+  .sdesk .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .sdesk .tile { min-width: 0; } .sdesk .tile:nth-child(3n) { border-right: 0; }
   .sdesk .chart .xs span:nth-child(even) { display: none; }
   /* the bars as wide as their slot allows, in whole pixels as the hero's
      cells are on a phone, a pixel at least between buckets */
@@ -191,7 +200,7 @@ try {
   <div class="frame">
     <div class="strip ranges">{{range .Ranges}}<a class="btn tab{{if .On}} on{{end}}" href="{{.URL}}"{{if .On}} aria-current="page"{{end}}>{{.Label}}</a>{{end}}<span class="side"><span class="seg" role="group" aria-label="Chart"><button type="button" class="btn line" data-chart="line" title="Line Chart" aria-label="Line Chart" aria-pressed="true"><svg viewBox="0 0 14 10" aria-hidden="true"><path d="M0 7h1v2h-1zM1 6h1v3h-1zM2 5h1v3h-1zM3 4h1v3h-1zM4 3h1v3h-1zM5 3h1v3h-1zM6 4h1v3h-1zM7 5h1v3h-1zM8 5h1v3h-1zM9 4h1v3h-1zM10 3h1v3h-1zM11 2h1v3h-1zM12 1h1v3h-1zM13 1h1v2h-1z"/></svg></button><button type="button" class="btn bar" data-chart="bar" title="Bar Chart" aria-label="Bar Chart" aria-pressed="false"><svg viewBox="0 0 14 10" aria-hidden="true"><path d="M0 5h2v5h-2zM4 2h2v8h-2zM8 6h2v4h-2zM12 0h2v10h-2z"/></svg></button></span><span class="online">{{.Online}} online</span></span></div>
     {{if .Filters}}<div class="strip chips">Only:{{range .Filters}} <span class="chip">{{.Label}} <b>{{.Value}}</b><a href="{{.URL}}" title="Lift this filter">×</a></span>{{end}}</div>{{end}}
-    <div class="tiles">{{range .Tiles}}<div class="tile"><div class="tl">{{.Label}}</div><div class="tv">{{.Value}}</div><div class="td">{{.Delta}}</div></div>{{end}}</div>
+    <div class="tiles">{{range .Tiles}}<div class="tile"><div class="tl">{{.Label}}</div><div class="tv" style="--em: {{.Em}}">{{.Value}}</div><div class="td">{{.Delta}}</div></div>{{end}}</div>
     <div class="chart">
       <div class="legend"><span><i></i>Page views</span><span><i class="vi"></i>Visitors</span><span><i class="end"></i>still filling</span></div>
       <div class="ys">{{range $i, $y := .Chart.Y}}<span style="top: {{mul $i 25}}%">{{$y}}</span>{{end}}</div>

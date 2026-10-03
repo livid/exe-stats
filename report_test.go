@@ -218,6 +218,20 @@ func TestChartBars(t *testing.T) {
 	}
 }
 
+// TestTileEm: a tile's number is measured in Verdana Bold's ems, so a
+// phone's third of the window can step it down until it fits.
+func TestTileEm(t *testing.T) {
+	for v, want := range map[string]string{"838,469": "4.65", "25,412,789": "6.45", "67%": "2.69", "3m 00s": "4.14", "": "1.00"} {
+		if got := (Tile{Value: v}).Em(); got != want {
+			t.Errorf("%q runs %s ems, want %s", v, got, want)
+		}
+	}
+	_, body := get(t, testStats(t).Handler(), "/stats")
+	if !strings.Contains(body, `<div class="tv" style="--em: 1.00">0</div>`) {
+		t.Error("the tiles do not say how wide their numbers run")
+	}
+}
+
 func TestStatsLanes(t *testing.T) {
 	for _, c := range []struct {
 		rows []int
