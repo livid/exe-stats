@@ -107,22 +107,27 @@ try {
 .sdesk .chart .xs { grid-column: 2; position: relative; height: 18px; margin-top: 3px; font-size: 11px; color: #555; container-type: inline-size; }
 .sdesk .chart .xs span { position: absolute; top: 0; left: calc(var(--x) * 1%); transform: translateX(-50%); white-space: nowrap; }
 .sdesk .chart .xs span.first { transform: none; } .sdesk .chart .xs span.last { transform: translateX(-100%); }
-/* the bars: a slot a bucket across the plot, and in each the bucket's
-   page views and visitors side by side, standing on the axis; the slot
-   still filling in the lines' tints, the slots after now empty. Each
-   bar a whole pixel wide and tall, at least one pixel when it holds
-   anything. Under the bars a label stands at the middle of its slot,
-   as far as the plot's ends allow. */
+/* the bars, drawn as the stats server's welcome hero draws its day (the
+   badge's palette on 2px cells): a slot a bucket across the plot, and in
+   each the bucket's page views and visitors side by side, standing on
+   the axis — page views the hero's lavender under an indigo cap,
+   visitors its peach under an orange one, the bucket still filling the
+   pale lavender of its yesterday, the slots after now empty. A bar is
+   whole 2px steps wide and tall, and one that holds anything is at
+   least its cap. Under the bars a label stands at the middle of its
+   slot, as far as the plot's ends allow. */
 .sdesk .chart .bc { position: absolute; inset: 0; display: none; container-type: size; }
 .sdesk .chart .bc i { flex: 1 1 0; height: 100%; display: flex; align-items: flex-end; justify-content: center; }
-.sdesk .chart .bc b { display: block; background: #333399;
-  width: max(1px, min(16px, calc(100cqw / var(--n) * .36))); width: max(1px, min(16px, round(down, 100cqw / var(--n) * .36, 1px)));
-  height: calc(var(--v) * .1cqh); height: round(up, var(--v) * .1cqh, 1px); }
-.sdesk .chart .bc b.vi { background: #ff6600; }
-.sdesk .chart .bc i.end b { background: #9999ff; } .sdesk .chart .bc i.end b.vi { background: #ffcc99; }
+.sdesk .chart .bc b { display: block; box-sizing: border-box; background: #9999ff; border-top: min(2px, var(--v) * 2px) solid #333399;
+  width: max(1px, min(20px, calc(100cqw / var(--n) * .42))); width: max(1px, min(20px, round(down, 100cqw / var(--n) * .42, 2px)));
+  height: calc(var(--v) * .1cqh); height: round(up, var(--v) * .1cqh, 2px); }
+.sdesk .chart .bc b.vi { background: #ffcc99; border-top-color: #ff6600; }
+.sdesk .chart .bc i.end b { background: #ebebff; border-top-color: #ccccff; }
 .stats-bars .sdesk .chart svg { display: none; }
 .stats-bars .sdesk .chart .bc { display: flex; }
-.stats-bars .sdesk .chart .legend i { width: 8px; height: 8px; }
+.stats-bars .sdesk .chart .legend i { box-sizing: border-box; width: 8px; height: 8px; background: #9999ff; border-top: 2px solid #333399; }
+.stats-bars .sdesk .chart .legend i.vi { background: #ffcc99; border-top-color: #ff6600; }
+.stats-bars .sdesk .chart .legend i.end { background: #ebebff; border-top-color: #ccccff; }
 .stats-bars .sdesk .chart .xs span { left: calc(var(--m) * 1%);
   transform: translateX(clamp(calc(var(--m) * -1cqw), -50%, calc((100 - var(--m)) * 1cqw - 100%))); }
 .sdesk .chart .none { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #777; }
