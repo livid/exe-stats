@@ -218,6 +218,28 @@ func TestChartBars(t *testing.T) {
 	}
 }
 
+// The y labels keep the count while the top is under 10,000 and go to
+// thousands and millions past it, so a big site's column is no wider
+// than a small one's (v2ex.com's 1,600,000 ran past the window's edge).
+func TestChartTicks(t *testing.T) {
+	for _, c := range []struct {
+		top  int
+		want string
+	}{
+		{40, "40 30 20 10 0"},
+		{8000, "8,000 6,000 4,000 2,000 0"},
+		{12000, "12K 9K 6K 3K 0"},
+		{600000, "600K 450K 300K 150K 0"},
+		{1600000, "1.6M 1.2M 800K 400K 0"},
+		{6000000, "6M 4.5M 3M 1.5M 0"},
+		{4000000000, "4B 3B 2B 1B 0"},
+	} {
+		if got := strings.Join(chartOf([]Point{{Pageviews: c.top}}, Span{}).Y, " "); got != c.want {
+			t.Errorf("a top of %d labels %q, want %q", c.top, got, c.want)
+		}
+	}
+}
+
 // TestTileEm: a tile's number is measured in Verdana Bold's ems, so a
 // phone's third of the window can step it down until it fits.
 func TestTileEm(t *testing.T) {

@@ -1030,6 +1030,24 @@ func ceil(m int) int {
 	return m
 }
 
+// tick is a y-axis label: the count itself while the top is under
+// 10,000, past it in thousands, millions or billions ("400K", "1.6M"),
+// so a big site's labels stay as narrow as a small one's.
+func tick(v, top int) string {
+	if top < 10000 {
+		return num(v)
+	}
+	for _, u := range []struct {
+		n    float64
+		unit string
+	}{{1e9, "B"}, {1e6, "M"}, {1e3, "K"}} {
+		if float64(v) >= u.n {
+			return strconv.FormatFloat(float64(v)/u.n, 'f', -1, 64) + u.unit
+		}
+	}
+	return num(v)
+}
+
 func chartOf(pts []Point, sp Span) Chart {
 	var c Chart
 	m := 0
@@ -1039,7 +1057,7 @@ func chartOf(pts []Point, sp Span) Chart {
 	c.Empty = m == 0
 	c.Max = ceil(m)
 	for i := 4; i >= 0; i-- {
-		c.Y = append(c.Y, num(c.Max*i/4))
+		c.Y = append(c.Y, tick(c.Max*i/4, c.Max))
 	}
 	n := len(pts)
 	x := func(i int) float64 {

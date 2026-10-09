@@ -105,13 +105,15 @@ try {
 /* the chart: y labels in a column, the plot a box with its grid drawn as
    the top borders of four boxes, the lines an SVG stretched over it
    with non-scaling 2px strokes, x labels in a row under it */
-.sdesk .chart { display: grid; grid-template-columns: 40px 1fr; padding: 8px 12px 0; }
+.sdesk .chart { display: grid; grid-template-columns: auto 1fr; padding: 8px 12px 0; }
 /* the legend heads the plot, at its right: a 12×2 swatch before each name */
 .sdesk .chart .legend { grid-column: 2; display: flex; justify-content: flex-end; gap: 12px; height: 18px; align-items: center; font-size: 11px; color: #555; }
 .sdesk .chart .legend i { display: inline-block; width: 12px; height: 2px; margin-right: 5px; vertical-align: middle; background: #333399; }
 .sdesk .chart .legend i.vi { background: #ff6600; } .sdesk .chart .legend i.end { background: #bbb; }
-.sdesk .chart .ys { position: relative; height: 160px; margin-right: 6px; font-size: 11px; color: #555; }
-.sdesk .chart .ys span { position: absolute; right: 0; transform: translateY(-50%); white-space: nowrap; }
+/* the y labels stack in one cell, so the column is as wide as the widest
+   of them (40px at least) and none reaches past the window's edge */
+.sdesk .chart .ys { display: grid; grid-template-rows: 100%; min-width: 34px; height: 160px; margin-right: 6px; font-size: 11px; color: #555; }
+.sdesk .chart .ys span { grid-area: 1 / 1; justify-self: end; align-self: start; position: relative; transform: translateY(-50%); white-space: nowrap; }
 .sdesk .chart .plot { position: relative; height: 160px; border-left: 1px solid #262626; border-bottom: 1px solid #262626; }
 .sdesk .chart .gl { position: absolute; left: 0; right: 0; height: 0; border-top: 1px solid #ddd; }
 .sdesk .chart svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; }
@@ -195,7 +197,7 @@ try {
 .sdesk .statusbar a:hover { text-decoration: underline; }
 /* a phone: narrower name and label columns, the numbers three to a
    row, and every other axis label dropped so the words never overlap */
-@media (max-width: 480px) { .sdesk .live .row .who { width: 104px; } .sdesk .chart { grid-template-columns: 34px 1fr; }
+@media (max-width: 480px) { .sdesk .live .row .who { width: 104px; } .sdesk .chart .ys { min-width: 28px; }
   /* the numbers three abreast, in columns that line up row on row */
   .sdesk .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .sdesk .tile { min-width: 0; } .sdesk .tile:nth-child(3n) { border-right: 0; }
