@@ -113,19 +113,25 @@ type Stats struct {
 	coll  *Collector
 	opt   Options
 
-	mu    sync.Mutex
-	cache map[string]cacheEntry
+	mu       sync.Mutex
+	cache    map[string]cacheEntry
+	inflight map[string]*building // the reports being computed (cached)
+	resets   int                  // how many times ResetCache was called
 
-	seal    time.Duration      // how long after its end a day is kept (sealDelay)
-	since   int64              // ms: the days before are read from their hits (countedBy)
-	views   [16]chan struct{}  // lockView's, each holding one
-	ctx     context.Context    // the keeper's and the reports': done once Stop is called
-	cancel  context.CancelFunc //
-	kept    chan struct{}      // closed when the keeper has returned
-	keeping atomic.Bool        // whether Run started the keeper
-	tidied  atomic.Int64       // ms: when the views were last trimmed (tidy)
-	live    *live              // the last three days' hits, in memory
-	noLive  bool               // a test's: read the store
+	seal  time.Duration     // how long after its end a day is kept (sealDelay)
+	since int64             // ms: the days before are read from their hits (countedBy)
+	views [16]chan struct{} // lockView's, each holding one
+	// counting holds the one report that is counting days from their
+	// hits, and queued is how many wait for it (enter)
+	counting chan struct{}
+	queued   atomic.Int32
+	ctx      context.Context    // the keeper's and the reports': done once Stop is called
+	cancel   context.CancelFunc //
+	kept     chan struct{}      // closed when the keeper has returned
+	keeping  atomic.Bool        // whether Run started the keeper
+	tidied   atomic.Int64       // ms: when the views were last trimmed (tidy)
+	live     *live              // the last three days' hits, in memory
+	noLive   bool               // a test's: read the store
 
 	tmpl *template.Template // the standalone page
 }
@@ -188,7 +194,7 @@ func New(db *sql.DB, o Options) (*Stats, error) {
 		}
 	}
 	s := &Stats{db: d, rd: rd, width: width, coll: c, opt: o, tmpl: t, seal: sealDelay, since: since,
-		kept: make(chan struct{})}
+		kept: make(chan struct{}), counting: make(chan struct{}, 1)}
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.live = &live{}
 	d.fed = func(hits []Hit, ids []int64) { s.live.fed(hits, ids, time.Now(), o.Location) }
@@ -308,7 +314,8 @@ func Funcs() template.FuncMap {
 // seeder) says so here.
 func (s *Stats) ResetCache() {
 	s.mu.Lock()
-	s.cache = nil
+	s.cache, s.inflight = nil, nil // a report being computed is finished for those who wait on it, and joined by no one else
+	s.resets++
 	s.mu.Unlock()
 }
 

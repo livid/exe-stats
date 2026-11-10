@@ -4,6 +4,7 @@ import (
 	"bufio"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"net"
@@ -385,9 +386,11 @@ func (s *Stats) build(sp Span, f Filter, lists []string, now time.Time) (*Report
 	var cur, prev counts
 	var online int
 	var recent []LiveHit
+	t := &turn{s: s, wait: waits(f)} // the report's one turn to count, for both spans
+	defer t.done()
 	if err := s.par(
-		func() (err error) { cur, err = s.over(f, sp.From, sp.To, now, w); return err },
-		func() (err error) { prev, err = s.over(f, sp.PrevFrom, sp.PrevTo, now, want{}); return err },
+		func() (err error) { cur, err = s.over(t, f, sp.From, sp.To, now, w); return err },
+		func() (err error) { prev, err = s.over(t, f, sp.PrevFrom, sp.PrevTo, now, want{}); return err },
 		func() (err error) { online, err = s.rd.Online(now.Add(-OnlineWindow).UnixMilli()); return err },
 		func() (err error) { recent, err = s.rd.Recent(recentN); return err },
 	); err != nil {
@@ -494,7 +497,7 @@ func series(sp Span, c counts, now time.Time) []Point {
 // can draw each one's day.
 func (s *Stats) Today(now time.Time) ([]Point, error) {
 	sp := spanOf("today", now, s.coll.Location())
-	c, err := s.over(Filter{}, sp.From, sp.To, now, want{hours: true})
+	c, err := s.over(nil, Filter{}, sp.From, sp.To, now, want{hours: true})
 	if err != nil {
 		return nil, err
 	}
@@ -507,7 +510,7 @@ func (s *Stats) Today(now time.Time) ([]Point, error) {
 // kept, a few minutes past midnight).
 func (s *Stats) Yesterday(now time.Time) ([]Point, error) {
 	sp := spanOf("yesterday", now, s.coll.Location())
-	c, err := s.over(Filter{}, sp.From, sp.To, now, want{hours: true})
+	c, err := s.over(nil, Filter{}, sp.From, sp.To, now, want{hours: true})
 	if err != nil {
 		return nil, err
 	}
@@ -876,6 +879,11 @@ func (s *Stats) PageData(r *http.Request) (*Page, error) {
 // ServePage answers with the desk as a page of its own.
 func (s *Stats) ServePage(w http.ResponseWriter, r *http.Request) {
 	p, err := s.PageData(r)
+	if errors.Is(err, ErrBusy) {
+		w.Header().Set("Retry-After", RetryAfter)
+		http.Error(w, "the stats are busy; try again in a moment", http.StatusServiceUnavailable)
+		return
+	}
 	if err != nil {
 		s.opt.Log("stats: %v", err)
 		http.Error(w, "the stats could not be read", http.StatusInternalServerError)
@@ -895,6 +903,13 @@ func (s *Stats) ServeJSON(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	sp := spanOf(q.Get("range"), now, s.coll.Location())
 	rep, err := s.cached(sp, filterOf(q), nil, now)
+	if errors.Is(err, ErrBusy) {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Retry-After", RetryAfter)
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]string{"error": "the stats are busy; try again in a moment"})
+		return
+	}
 	if err != nil {
 		s.opt.Log("stats: %v", err)
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -911,11 +926,26 @@ func (s *Stats) ServeJSON(w http.ResponseWriter, r *http.Request) {
 // so the page's refetches and a busy moment cost the store one pass.
 const cacheTTL = 10 * time.Second
 
+// RetryAfter is the Retry-After of an answer to ErrBusy, in seconds.
+const RetryAfter = "5"
+
 type cacheEntry struct {
 	at  time.Time
 	rep *Report
 }
 
+// building is a report being computed, for the requests that ask the
+// same of it meanwhile.
+type building struct {
+	done   chan struct{} // closed once rep and err are set
+	rep    *Report
+	err    error
+	joined int // how many requests wait on it (under Stats.mu)
+}
+
+// cached is the report of a query: the one kept if it is fresh, the
+// one being computed if one is — any number of requests for a query
+// cost one pass — and else computed here, for them all.
 func (s *Stats) cached(sp Span, f Filter, lists []string, now time.Time) (*Report, error) {
 	k, _ := json.Marshal(struct {
 		Span   string
@@ -928,18 +958,36 @@ func (s *Stats) cached(sp Span, f Filter, lists []string, now time.Time) (*Repor
 		s.mu.Unlock()
 		return e.rep, nil
 	}
-	s.mu.Unlock()
-	rep, err := s.build(sp, f, lists, now)
-	if err != nil {
-		return nil, err
+	if b := s.inflight[key]; b != nil {
+		b.joined++
+		s.mu.Unlock()
+		<-b.done
+		return b.rep, b.err
 	}
-	s.mu.Lock()
-	if s.cache == nil || len(s.cache) > 64 {
-		s.cache = map[string]cacheEntry{}
+	b := &building{done: make(chan struct{})}
+	if s.inflight == nil {
+		s.inflight = map[string]*building{}
 	}
-	s.cache[key] = cacheEntry{at: now, rep: rep}
+	s.inflight[key] = b
+	resets := s.resets
 	s.mu.Unlock()
-	return rep, nil
+	b.err = errors.New("stats: the report was not built") // what the others get if build panics
+	defer func() {
+		s.mu.Lock()
+		if s.inflight[key] == b {
+			delete(s.inflight, key)
+		}
+		if b.err == nil && s.resets == resets { // one begun before a ResetCache is not kept
+			if s.cache == nil || len(s.cache) > 64 {
+				s.cache = map[string]cacheEntry{}
+			}
+			s.cache[key] = cacheEntry{at: now, rep: b.rep}
+		}
+		s.mu.Unlock()
+		close(b.done)
+	}()
+	b.rep, b.err = s.build(sp, f, lists, now)
+	return b.rep, b.err
 }
 
 func tiles(cur, prev Summary) []Tile {

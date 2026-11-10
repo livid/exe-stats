@@ -57,14 +57,19 @@ a filtered view's days are counted the first time a report asks, kept
 while it is read (32 views at most, a week unread at most). The numbers
 are the same as the hits' own to the last one, page lists and JSON alike.
 
-Nor does a report read today's hits back from the store. `Run` loads
-the last three days' hits into memory, and every batch the writer
-commits joins them, so today, the 24 hours and the 24 before them are
-summed there: on every core at once, a shard of visitors each, which add
-up as the days do. A site with more than four million hits in three
-days, about 180 bytes a hit in memory, reads them from the store as
-before; so does a host that never calls `Run`, or writes hits around
-`DB().Add`.
+Counting is the one costly thing a report does, so it is rationed. One
+report counts at a time — its span and the span before under one turn —
+and writes what it counted together, a transaction for a filtered
+view's whole span; any number of requests for one query are handed the
+one report computed for it; and a report whose days are kept, the desk
+without filters among them, waits on none of this. When eight reports
+already wait their turn to count, the next is not queued: `PageData`
+returns `stats.ErrBusy`, and `ServePage` and `ServeJSON` answer 503
+with `Retry-After`. The view without filters is never turned away: in
+the minutes after a midnight, before `Run` has counted the day, it
+waits its turn instead. So a crawler walking every filter of the desk gets
+a short line of its own to stand in, and the host's pages, on the same
+cores and the same database, keep being served.
 
 `Options.Reader` is a second pool on the same file, read-only, for the
 reports to read through. With one a report runs as many of its queries
@@ -124,6 +129,10 @@ instead of taking the standalone page: parse `TemplateHTML()` into its
 template set with `Funcs()`, put `statshead` in the document head with
 `statscss`, and give the `stats` block what `PageData(r)` returns. That
 is how the hub does it.
+
+`PageData` returns `stats.ErrBusy` when the desk is busy counting other
+views (above): answer it with 503 and `Retry-After: stats.RetryAfter`
+on a page of the host's own, as any other error of its would be.
 
 The blocks are named `statshead`, `statscss`, `stats` and `statsdisc`,
 and the stylesheet's selectors all sit under `.sdesk`, so nothing of the

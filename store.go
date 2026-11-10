@@ -25,7 +25,7 @@ type DB struct {
 	db *sql.DB
 	// gen counts the times kept days were dropped for hits written
 	// under them (Add, Sweep), and busy is how many such writes are on
-	// their way: a day counted across either is not kept (keepDay)
+	// their way: a day counted across either is not kept (keepDays)
 	gen, busy atomic.Int64
 	// fed is told of each batch Add commits, with its ids, and swept of
 	// each Sweep's cut: the hits in memory (live.go) follow the store

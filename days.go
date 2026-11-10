@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -48,6 +49,9 @@ const (
 	maxViews  = 32
 	viewIdle  = 7 * 24 * time.Hour
 	markEvery = 10 * time.Minute
+	// countQueue is how many reports may wait for their turn to count
+	// (enter); one more is told the desk is busy.
+	countQueue = 8
 )
 
 // the parts of a day besides its lists, which go by their dimension
@@ -55,6 +59,13 @@ const (
 	partSummary = "summary"
 	partHours   = "hours"
 )
+
+// keepBatch is how many cells of counted days are written in one
+// transaction: a commit is a sync of the disk, and a view never
+// counted before has every day of its span to write. A filtered
+// view's year is one commit; a busy site's whole day is its own.
+// (A variable for a test to make small.)
+var keepBatch = 1 << 16
 
 // beforeRead runs between keep's counting and its read, for a test to
 // change the kept days there.
@@ -64,6 +75,11 @@ var (
 	// errChanged is a report that found a kept day gone while it read:
 	// hits were written under it, and it is counted again.
 	errChanged = errors.New("stats: the kept days changed while they were read")
+	// ErrBusy is a report that would have had days to count while
+	// countQueue reports already wait to count theirs: nothing was
+	// counted for it, and the same request a little later is served.
+	// A host answers it with 503 (ServePage and ServeJSON do).
+	ErrBusy = errors.New("stats: busy counting other views")
 )
 
 // daySpan is one day, [start, end) in ms.
@@ -127,17 +143,95 @@ func viewOf(f Filter) string {
 
 // lockView holds a view's days while they are counted and read, so two
 // reports do not count the same day and a view is not dropped from
-// under one. Views share 16 locks: a collision only waits — until ctx
-// is done.
+// under one. The view without filters has a lock of its own, so the
+// desk as it opens never waits on a filtered view's counting; the
+// filtered views share the other 15: a collision only waits — until
+// ctx is done.
 func (s *Stats) lockView(ctx context.Context, view string) (unlock func(), err error) {
-	h := fnv.New32a()
-	h.Write([]byte(view))
-	ch := s.views[h.Sum32()%uint32(len(s.views))]
+	ch := s.views[0]
+	if view != viewOf(Filter{}) {
+		h := fnv.New32a()
+		h.Write([]byte(view))
+		ch = s.views[1+h.Sum32()%uint32(len(s.views)-1)]
+	}
 	select {
 	case ch <- struct{}{}:
 		return func() { <-ch }, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
+	}
+}
+
+// enter takes a report's turn to count days from their hits, which is
+// the one costly thing a report does: a pass over every hit of each
+// day. One view counts at a time — its days already spread over the
+// reader's connections — so however many filters are asked at once,
+// the host's cores and its database are not all taken by the desk.
+// At most countQueue reports wait; the next is ErrBusy at once. The
+// keeper (wait) waits its turn however long the line is. A report
+// enters through its turn, once for all it counts.
+func (s *Stats) enter(ctx context.Context, wait bool) (leave func(), err error) {
+	leave = func() { <-s.counting }
+	select {
+	case s.counting <- struct{}{}:
+		return leave, nil
+	default:
+	}
+	if !wait {
+		if s.queued.Add(1) > countQueue {
+			s.queued.Add(-1)
+			return nil, ErrBusy
+		}
+		defer s.queued.Add(-1)
+	}
+	select {
+	case s.counting <- struct{}{}:
+		return leave, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+// waits says a view's reports wait their turn to count however long
+// the line: the view without filters, which every desk opens on.
+func waits(f Filter) bool { return viewOf(f) == viewOf(Filter{}) }
+
+// turn is a report's turn to count (enter): taken when the first of its
+// spans finds days to count, shared by the others — a report counts its
+// span and the span before under one turn — and given back when the
+// report is built.
+type turn struct {
+	s    *Stats
+	wait bool        // the keeper's, and the view without filters': however long the line
+	has  atomic.Bool // taken — asked with a view held, so without mu, which take holds while it waits in line
+	mu   sync.Mutex
+	out  func() // leaves the turn; nil until it is taken
+	err  error  // why it was not taken
+}
+
+// take takes the turn if the report has not yet; a report turned away
+// once is turned away for good.
+func (t *turn) take(ctx context.Context) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.out != nil || t.err != nil {
+		return t.err
+	}
+	t.out, t.err = t.s.enter(ctx, t.wait)
+	t.has.Store(t.err == nil)
+	return t.err
+}
+
+func (t *turn) taken() bool { return t.has.Load() }
+
+// done gives the turn back, if it was taken.
+func (t *turn) done() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.out != nil {
+		t.has.Store(false)
+		t.out()
+		t.out = nil
 	}
 }
 
@@ -183,7 +277,7 @@ func (s *Stats) split(from, to, now time.Time) (days []daySpan, raw [][2]int64) 
 // every query on a connection of its own (par). A list is every key
 // when the stretch is pieced together, and cut at topMax when it is
 // one stretch of hits, as Top is.
-func (s *Stats) over(f Filter, from, to, now time.Time, w want) (counts, error) {
+func (s *Stats) over(t *turn, f Filter, from, to, now time.Time, w want) (counts, error) {
 	c := counts{lists: map[string]map[string]int{}}
 	for _, d := range w.dims {
 		c.lists[d] = map[string]int{}
@@ -193,7 +287,7 @@ func (s *Stats) over(f Filter, from, to, now time.Time, w want) (counts, error) 
 	var tasks []func() error
 	if len(days) > 0 {
 		tasks = append(tasks, func() error {
-			fresh, err := s.keep(s.ctx, f, days, w.parts(), now, func(id, begun int64) error {
+			fresh, err := s.keep(s.ctx, t, f, days, w.parts(), now, func(id, begun int64) error {
 				return s.readKept(s.ctx, &c, &mu, id, begun, days, w)
 			})
 			if err == nil && fresh {
@@ -351,29 +445,69 @@ func ranked(m map[string]int) []Row {
 
 // keep makes sure a view keeps the given parts of the days, counting a
 // day that misses any of them from its hits — every part at once, each
-// day on a connection of its own — and then, with the view still held,
+// day on a connection of its own, in its turn (enter) and written
+// keepBatch cells a transaction — and then, with the view still held,
 // hands its id to read, with the time of the first hit (the days that
 // end before it hold nothing). A read that finds a day gone (errChanged)
-// counts again, a few times. fresh says the view is new.
-func (s *Stats) keep(ctx context.Context, f Filter, days []daySpan, parts []string, now time.Time, read func(id, begun int64) error) (fresh bool, err error) {
+// counts again, a few times. fresh says the view is new. A report
+// whose turn to count does not come is ErrBusy, and has kept nothing:
+// a view is made only once its turn has.
+//
+// The turn is the report's (t; nil is a turn for this call alone), and
+// is never waited for with the view held: a look that finds days to
+// count lets the view go, takes the turn and looks again. So the ones
+// in line hold no view, a view is waited for no longer than its days
+// take to count, and nothing waits on the line but the line. The
+// keeper, and the view without filters whoever asks — the desk as it
+// opens, Today and Yesterday, in the minutes after a midnight before
+// the keeper has counted the day — wait however long the line is and
+// are never turned away (waits).
+func (s *Stats) keep(ctx context.Context, t *turn, f Filter, days []daySpan, parts []string, now time.Time, read func(id, begun int64) error) (fresh bool, err error) {
 	view := viewOf(f)
-	unlock, err := s.lockView(ctx, view)
-	if err != nil {
-		return false, err
+	if t == nil {
+		t = &turn{s: s, wait: read == nil || waits(f)}
+		defer t.done()
 	}
-	defer unlock()
-	id, fresh, err := s.db.viewID(ctx, view, now.UnixMilli())
-	if err != nil {
-		return false, err
-	}
-	for try := 0; ; try++ {
+	errTurn := errors.New("days to count, and no turn yet")
+	look := func() error {
+		unlock, err := s.lockView(ctx, view)
+		if err != nil {
+			return err
+		}
+		defer unlock()
+		if !t.taken() {
+			if known, err := s.rd.viewKnown(ctx, view); err != nil {
+				return err
+			} else if !known {
+				return errTurn // every day of it is to count
+			}
+		}
+		id, made, err := s.db.viewID(ctx, view, now.UnixMilli())
+		if err != nil {
+			return err
+		}
+		fresh = fresh || made
 		have, err := s.rd.keptParts(ctx, id, days[0].start, days[len(days)-1].start)
 		if err != nil {
-			return fresh, err
+			return err
 		}
 		begun, err := s.rd.firstHit(ctx)
 		if err != nil {
-			return fresh, err
+			return err
+		}
+		var mu sync.Mutex // counted's, and cells'
+		var counted []keptDay
+		cells := 0
+		write := func(all bool) error { // the counted days, once they hold keepBatch cells
+			mu.Lock()
+			batch := counted
+			if len(batch) == 0 || !all && cells < keepBatch {
+				mu.Unlock()
+				return nil
+			}
+			counted, cells = nil, 0
+			mu.Unlock()
+			return s.db.keepDays(ctx, id, batch)
 		}
 		var tasks []func() error
 		for _, d := range days {
@@ -392,24 +526,47 @@ func (s *Stats) keep(ctx context.Context, f Filter, days []daySpan, parts []stri
 					return err
 				}
 				gen := s.db.gen.Load()
-				cells, err := s.countDay(ctx, f, d)
+				got, err := s.countDay(ctx, f, d)
 				if err != nil {
 					return err
 				}
-				return s.db.keepDay(ctx, id, d.start, cells, gen)
+				mu.Lock()
+				counted = append(counted, keptDay{d.start, got, gen})
+				for _, cs := range got {
+					cells += len(cs)
+				}
+				mu.Unlock()
+				return write(false)
 			})
 		}
+		if len(tasks) > 0 && !t.taken() {
+			return errTurn
+		}
 		if err := s.par(tasks...); err != nil {
-			return fresh, err
+			write(true) // the days that were counted are kept all the same
+			return err
+		}
+		if err := write(true); err != nil {
+			return err
 		}
 		if read == nil {
-			return fresh, nil
+			return nil
 		}
 		if beforeRead != nil {
 			beforeRead()
 		}
-		err = read(id, begun)
-		if !errors.Is(err, errChanged) || try == 4 {
+		return read(id, begun)
+	}
+	for try := 0; ; {
+		err := look()
+		switch {
+		case err == errTurn:
+			if err := t.take(ctx); err != nil {
+				return fresh, err
+			}
+		case errors.Is(err, errChanged) && try < 4:
+			try++
+		default:
 			return fresh, err
 		}
 	}
@@ -817,27 +974,64 @@ func (d *DB) firstHit(ctx context.Context) (int64, error) {
 	return ms.Int64, nil
 }
 
-// keepDay writes a day's parts for a view, each replacing what it held
-// — unless kept days were dropped, or are being dropped, since gen was
-// read before the day was counted: hits were written under it while it
-// was, and it is counted again. The writes hold the write lock, so a
-// drop either committed before the check, and moved gen or still holds
-// busy, or commits after this one and takes the day with it.
-func (d *DB) keepDay(ctx context.Context, view, day int64, parts map[string][]cell, gen int64) error {
+// keptDay is a day as it was counted: its parts, and the store's gen
+// from before the count.
+type keptDay struct {
+	day   int64
+	parts map[string][]cell
+	gen   int64
+}
+
+// keepDays writes counted days' parts for a view, each replacing what
+// it held, in one transaction — unless kept days were dropped, or are
+// being dropped, since a day's gen was read before it was counted:
+// hits were written under it while it was, and it is counted again.
+// The writes hold the write lock, so a drop either committed before
+// the check, and moved gen or still holds busy, or commits after this
+// one and takes the day with it.
+func (d *DB) keepDays(ctx context.Context, view int64, days []keptDay) error {
 	tx, err := d.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	for p, cs := range parts {
-		if _, err := tx.ExecContext(ctx, `INSERT OR REPLACE INTO hits_days (view, part, day, data) VALUES (?, ?, ?, ?)`, view, p, day, pack(cs)); err != nil {
+	put, err := tx.PrepareContext(ctx, `INSERT OR REPLACE INTO hits_days (view, part, day, data) VALUES (?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer put.Close()
+	for _, k := range days {
+		for p, cs := range k.parts {
+			if _, err := put.ExecContext(ctx, view, p, k.day, pack(cs)); err != nil {
+				return err
+			}
+		}
+	}
+	if d.busy.Load() != 0 {
+		return nil
+	}
+	gen := d.gen.Load()
+	for _, k := range days {
+		if k.gen == gen {
+			continue
+		}
+		// counted across a drop: not kept, and what it replaced was dropped
+		if _, err := tx.ExecContext(ctx, `DELETE FROM hits_days WHERE view = ? AND day = ?`, view, k.day); err != nil {
 			return err
 		}
 	}
-	if d.busy.Load() != 0 || d.gen.Load() != gen {
-		return nil
-	}
 	return tx.Commit()
+}
+
+// viewKnown says whether a view has been made (viewID): one that has
+// not keeps no day.
+func (d *DB) viewKnown(ctx context.Context, filter string) (bool, error) {
+	var id int64
+	err := d.db.QueryRowContext(ctx, `SELECT id FROM hits_views WHERE filter = ?`, filter).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 // dropDays forgets the kept days whose midnight is before ("<") or
@@ -1085,7 +1279,7 @@ func (s *Stats) fill(ctx context.Context, now time.Time) error {
 	days, _ := s.split(horizon(now, s.coll.Location()), now, now)
 	parts := allParts()
 	for i := len(days); i > 0; i -= 7 {
-		if _, err := s.keep(ctx, Filter{}, days[max(0, i-7):i], parts, now, nil); err != nil {
+		if _, err := s.keep(ctx, nil, Filter{}, days[max(0, i-7):i], parts, now, nil); err != nil {
 			return err
 		}
 	}
